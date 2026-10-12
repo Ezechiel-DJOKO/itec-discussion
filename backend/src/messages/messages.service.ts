@@ -118,4 +118,60 @@ export class MessagesService {
     this.gateway.diffuserChannelMessage(channel, savedMsg);
     return savedMsg;
   }
+
+    // 🔴 EDITER UN MESSAGE PROJET
+  async updateProjectMessage(id: string, userId: string, newText: string) {
+    const msg = await this.msgRepo.findOne({ where: { id } });
+    if (!msg) throw new NotFoundException('Message introuvable');
+    if (msg.userId !== userId) throw new ForbiddenException('Non autorisé');
+
+    msg.message = newText;
+    msg.isEdited = true;
+    const saved = await this.msgRepo.save(msg);
+    const full = await this.msgRepo.findOne({ where: { id: saved.id } });
+    this.gateway.diffuserProjectMessageUpdate(msg.projectId, full);
+    return full;
+  }
+
+  // 🔴 SUPPRIMER UN MESSAGE PROJET
+  async deleteProjectMessage(id: string, userId: string) {
+    const msg = await this.msgRepo.findOne({ where: { id } });
+    if (!msg) throw new NotFoundException('Message introuvable');
+    if (msg.userId !== userId) throw new ForbiddenException('Non autorisé');
+
+    msg.message = ' Ce message a été supprimé';
+    msg.isDeleted = true;
+    const saved = await this.msgRepo.save(msg);
+    const full = await this.msgRepo.findOne({ where: { id: saved.id } });
+    this.gateway.diffuserProjectMessageUpdate(msg.projectId, full);
+    return full;
+  }
+
+  // 🔴 EDITER UN MESSAGE CHANNEL
+  async updateChannelMessage(id: string, userId: string, newText: string) {
+    const msg = await this.channelMsgRepo.findOne({ where: { id } });
+    if (!msg) throw new NotFoundException('Message introuvable');
+    if (msg.userId !== userId) throw new ForbiddenException('Non autorisé');
+
+    msg.message = newText;
+    msg.isEdited = true;
+    const saved = await this.channelMsgRepo.save(msg);
+    const full = await this.channelMsgRepo.findOne({ where: { id: saved.id } });
+    this.gateway.diffuserChannelMessageUpdate(msg.channel, full);
+    return full;
+  }
+
+  // 🔴 SUPPRIMER UN MESSAGE CHANNEL
+  async deleteChannelMessage(id: string, userId: string) {
+    const msg = await this.channelMsgRepo.findOne({ where: { id } });
+    if (!msg) throw new NotFoundException('Message introuvable');
+    if (msg.userId !== userId) throw new ForbiddenException('Non autorisé');
+
+    msg.message = ' Ce message a été supprimé';
+    msg.isDeleted = true;
+    const saved = await this.channelMsgRepo.save(msg);
+    const full = await this.channelMsgRepo.findOne({ where: { id: saved.id } });
+    this.gateway.diffuserChannelMessageUpdate(msg.channel, full);
+    return full;
+  }
 }

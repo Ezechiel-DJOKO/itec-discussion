@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, UseGuards, Request, Patch, Delete } from '@nestjs/common';
 import { MessagesService } from './messages.service.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { ChannelType } from './entities/channel-message.entity.js';
@@ -42,5 +42,37 @@ export class MessagesController {
     @Request() req: ReqUser,
   ) {
     return this.msgService.addChannelMessage(type, req.user.sub, message);
+  }
+
+    @Patch('projects/messages/:id')
+  updateProjectMsg(@Param('id') id: string, @Body('message') message: string, @Request() req: ReqUser) {
+    return this.msgService.updateProjectMessage(id, req.user.sub, message);
+  }
+
+  @Delete('projects/messages/:id')
+  deleteProjectMsg(@Param('id') id: string, @Request() req: ReqUser) {
+    return this.msgService.deleteProjectMessage(id, req.user.sub);
+  }
+
+  @Patch('channels/messages/:id')
+  updateChannelMsg(@Param('id') id: string, @Body('message') message: string, @Request() req: ReqUser) {
+    return this.msgService.updateChannelMessage(id, req.user.sub, message);
+  }
+
+  @Delete('channels/messages/:id')
+  deleteChannelMsg(@Param('id') id: string, @Request() req: ReqUser) {
+    return this.msgService.deleteChannelMessage(id, req.user.sub);
+  }
+
+    @Post('messages/forward')
+  async forward(
+    @Body() body: { message: string; targetType: 'project' | 'channel'; targetId: string },
+    @Request() req: ReqUser,
+  ) {
+    const text = body.message;
+    if (body.targetType === 'project') {
+      return this.msgService.addProjectMessage(body.targetId, req.user.sub, text);
+    }
+    return this.msgService.addChannelMessage(body.targetId as any, req.user.sub, text);
   }
 }

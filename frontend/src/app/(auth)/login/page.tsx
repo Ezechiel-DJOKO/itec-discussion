@@ -33,8 +33,11 @@ export default function LoginPage() {
 
       <div className="glass-card p-8 sm:p-10 w-full max-w-md relative z-10">
         <div className="flex justify-center mb-6">
-          <img src="/logo-itec.jpg" alt="ITEC Logo" className="h-16 w-auto rounded-xl shadow-md" />
-        </div>
+<img 
+  src="/logo-itec.jpg" 
+  alt="ITEC Logo" 
+  className="h-16 w-auto rounded-xl shadow-md object-contain"
+/>        </div>
         
         <h1 className="text-2xl font-bold text-center text-white mb-2">Connexion</h1>
         <p className="text-center text-white/50 mb-8 text-sm">Accédez à votre espace ITEC</p>

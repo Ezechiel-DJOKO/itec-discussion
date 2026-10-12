@@ -24,7 +24,7 @@ export default function LandingPage() {
         <img 
           src="/logo-itec.jpg" 
           alt="ITEC Logo" 
-          className="h-24 w-auto rounded-2xl shadow-lg mb-8" 
+          className="h-16 w-auto rounded-xl shadow-md object-contain"
         />
         
         <h1 className="text-3xl font-black text-white mb-4 tracking-wide">

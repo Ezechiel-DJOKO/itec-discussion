@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { User } from '../../users/entities/user.entity.js';
 
 export enum ChannelType {
@@ -24,6 +24,15 @@ export class ChannelMessage {
   @Column({ type: 'text' })
   message: string;
 
+  @Column({ default: false })
+  isEdited: boolean;
+
+  @Column({ default: false })
+  isDeleted: boolean;
+
   @CreateDateColumn()
   creeLe: Date;
+
+  @UpdateDateColumn()
+  modifieLe: Date;
 }
