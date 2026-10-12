@@ -116,26 +116,49 @@ export default function ProjectChat({ projectId, currentUser }: { projectId: str
     } catch { alert("Erreur d'envoi"); } finally { setUploading(false); }
   };
 
-  const parseMessage = (msg: string) => {
+    const parseMessage = (msg: string) => {
     const token = Cookies.get('token');
     const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-    if (msg.startsWith('[TRANSFERT]')) return (
-      <div className="space-y-1"><div className="text-[10px] uppercase opacity-70 border-l-2 border-white/40 pl-2">Transféré</div><div>{parseMessage(msg.replace('[TRANSFERT]', '').trim())}</div></div>
-    );
-    if (msg.startsWith('[AUDIO]')) return <audio controls src={`${baseURL}${msg.replace('[AUDIO]', '')}?token=${token}`} className="w-48 h-10 rounded-lg" />;
-    if (msg.startsWith('[IMAGE]')) {
-      const src = `${baseURL}${msg.replace('[IMAGE]', '')}?token=${token}`;
-      return <img src={src} alt="Img" className="max-w-[200px] rounded-lg cursor-pointer" onClick={() => window.open(src, '_blank')} />;
-    }
-    if (msg.startsWith('[FILE]')) {
-      const [pathUrl, fileName] = msg.replace('[FILE]', '').split('|');
+    // 🔴 HELPER POUR LES URLS (Cloudinary = direct, Local = on rajoute le backend + token)
+    const resolveUrl = (pathUrl: string) => {
+      if (pathUrl.startsWith('http://') || pathUrl.startsWith('https://')) {
+        return pathUrl; // Cloudinary
+      }
+      return `${baseURL}${pathUrl}?token=${token}`; // Ancien mode local
+    };
+
+    if (msg.startsWith('[TRANSFERT]')) {
       return (
-        <a href={`${baseURL}${pathUrl}?token=${token}`} download={fileName} target="_blank" className="flex items-center gap-2 bg-white/20 px-3 py-2 rounded-xl">
-          <Download size={16} /> <span className="text-xs font-bold truncate max-w-[120px]">{fileName || 'Document'}</span>
+        <div className="space-y-1">
+          <div className="text-[10px] uppercase opacity-70 border-l-2 border-white/40 pl-2">Transféré</div>
+          <div>{parseMessage(msg.replace('[TRANSFERT]', '').trim())}</div>
+        </div>
+      );
+    }
+
+    if (msg.startsWith('[AUDIO]')) {
+      const pathUrl = msg.replace('[AUDIO]', '');
+      return <audio controls src={resolveUrl(pathUrl)} className="w-48 sm:w-64 h-10 rounded-lg outline-none" />;
+    }
+
+    if (msg.startsWith('[IMAGE]')) {
+      const pathUrl = msg.replace('[IMAGE]', '');
+      const src = resolveUrl(pathUrl);
+      return <img src={src} alt="Image envoyée" className="max-w-[200px] sm:max-w-xs rounded-lg cursor-pointer hover:opacity-90 transition shadow-sm" onClick={() => window.open(src, '_blank')} />;
+    }
+
+    if (msg.startsWith('[FILE]')) {
+      const content = msg.replace('[FILE]', '');
+      const [pathUrl, fileName] = content.split('|');
+      return (
+        <a href={resolveUrl(pathUrl)} download={fileName} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-xl transition shadow-sm w-fit">
+          <Download size={18}/>
+          <span className="text-sm font-bold truncate max-w-[150px]">{fileName || 'Document'}</span>
         </a>
       );
     }
+
     return <span className="whitespace-pre-wrap">{msg}</span>;
   };
 

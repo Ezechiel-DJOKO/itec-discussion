@@ -21,7 +21,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { NotFoundException } from '@nestjs/common';
-
+import { memoryStorage } from 'multer';
+import { StorageService } from './storage.service.js';
 interface ReqUser {
   user: { sub: string; email: string };
 }
@@ -58,8 +59,10 @@ const ALLOWED_EXTS = [
 @Controller()
 @UseGuards(JwtAuthGuard)
 export class FilesController {
-  constructor(private readonly filesService: FilesService) {}
-
+constructor(
+    private readonly filesService: FilesService,
+    private readonly storageService: StorageService, // 👈 NOUVEAU
+  ) {}
   // POST /tasks/:taskId/files — Upload
   @Post('tasks/:taskId/files')
   @UseInterceptors(
@@ -136,33 +139,18 @@ export class FilesController {
     return this.filesService.remove(id, req.user.sub);
   }
 
-    // ─── UPLOAD DE FICHIER GÉNÉRIQUE (POUR LE CHAT) ───
+  // ─── UPLOAD DE FICHIER GÉNÉRIQUE (CHAT / CLOUDINARY) ───
   @Post('files/chat/upload')
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: diskStorage({
-        destination: './uploads',
-        filename: (_req, file, cb) => {
-          const unique = `${uuidv4()}${extname(file.originalname)}`;
-          cb(null, unique);
-        },
-      }),
+      storage: memoryStorage(), // 👈 On garde le fichier en RAM pour l'envoyer à Cloudinary
       limits: { fileSize: 10 * 1024 * 1024 }, // 10 Mo
     }),
   )
-  uploadChatFile(@UploadedFile() file: Express.Multer.File) {
-    // Retourne simplement l'URL locale du fichier
-    return { url: `/files/chat/${file.filename}` };
-  }
-
-  // ─── LECTURE / STREAMING DE FICHIER CHAT ───
-  @Get('files/chat/:filename')
-  serveChatFile(@Param('filename') filename: string, @Res() res: Response) {
-    const absolutePath = path.join(process.cwd(), 'uploads', filename);
-    if (!fs.existsSync(absolutePath)) {
-      throw new NotFoundException('Fichier introuvable');
-    }
-    // Permet au navigateur de lire directement le fichier (ex: audio)
-    return res.sendFile(absolutePath);
+  async uploadChatFile(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new Error('Aucun fichier fourni');
+    // On envoie directement à Cloudinary
+    const url = await this.storageService.uploadToCloudinary(file);
+    return { url };
   }
 }
