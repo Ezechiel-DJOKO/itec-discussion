@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+@theme {
+  --color-itec-dark: #0A2540;
+  --color-itec-royal: #1E4D8C;
+  --color-itec-sky: #4FC3F7;
+  --color-itec-red: #E53E3E;
+}
+
+body {
+  /* Le fond global : Dégradé bleu marine vers bleu royal */
+  background: linear-gradient(135deg, #0A2540 0%, #1E4D8C 100%);
+  background-attachment: fixed;
+  color: #F7FAFC; /* Blanc cassé pour le texte */
+  min-height: 100vh;
+}
+
+/* 🟢 CLASSE MAGIQUE : L'effet verre dépoli (Glassmorphism) */
+.glass-card {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  border-radius: 1.25rem; /* Coins bien arrondis */
+}
+
+/* 🟢 CLASSE MAGIQUE : Inputs sur fond sombre */
+.glass-input {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: white;
+  transition: all 0.3s ease;
+}
+
+.glass-input:focus {
+  border-color: #4FC3F7; /* Bleu ciel ITEC */
+  outline: none;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.glass-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
