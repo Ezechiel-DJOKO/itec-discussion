@@ -84,22 +84,31 @@ export default function Navbar() {
             )}
           </button>
 
+                    {/* DROPDOWN NOTIFICATIONS */}
           {openNotifs && (
-            <div className="absolute right-0 mt-3 w-72 sm:w-80 glass-card border border-white/20 overflow-hidden shadow-2xl bg-[#0A2540]/95 z-50">
-              <div className="flex justify-between items-center p-3 sm:p-4 border-b border-white/10 bg-black/20">
+            <div className="absolute right-0 mt-3 w-72 sm:w-80 bg-[#0A2540] border border-white/20 overflow-hidden shadow-2xl rounded-2xl z-50">
+              <div className="flex justify-between items-center p-3 sm:p-4 border-b border-white/10 bg-black/40">
                 <span className="font-semibold text-white text-sm">Notifications</span>
                 {nonLues > 0 && (
-                  <button onClick={markAllAsRead} className="text-xs text-itec-sky hover:underline">
+                  <button
+                    onClick={markAllAsRead}
+                    className="text-xs text-itec-sky hover:underline"
+                  >
                     Tout lire
                   </button>
                 )}
               </div>
               <div className="max-h-80 overflow-y-auto divide-y divide-white/10">
                 {notifs.length === 0 ? (
-                  <div className="p-4 text-center text-xs text-white/50">Aucune notification</div>
+                  <div className="p-6 text-center text-xs text-white/50">
+                    Aucune notification
+                  </div>
                 ) : (
                   notifs.map((n) => (
-                    <div key={n.id} className={`p-3 text-xs ${n.lu ? 'opacity-50' : 'bg-white/5'}`}>
+                    <div
+                      key={n.id}
+                      className={`p-3 text-xs ${n.lu ? 'opacity-50' : 'bg-white/5'}`}
+                    >
                       <p className="text-white/90 leading-relaxed">{n.message}</p>
                       <p className="text-[10px] text-itec-sky mt-1 font-medium">
                         {new Date(n.creeLe).toLocaleString('fr-FR')}
@@ -123,17 +132,21 @@ export default function Navbar() {
             </div>
           </button>
 
+                    {/* DROPDOWN PROFIL */}
           {openProfile && (
-            <div className="absolute right-0 mt-3 w-64 glass-card border border-white/20 overflow-hidden shadow-2xl bg-[#0A2540]/95 p-4 z-50 space-y-4">
+            <div className="absolute right-0 mt-3 w-64 bg-[#0A2540] border border-white/20 overflow-hidden shadow-2xl rounded-2xl p-4 z-50 space-y-4">
               <div className="border-b border-white/10 pb-3">
-                <div className="font-bold text-white text-sm flex items-center justify-between">
-                  {user?.nom}
-{user?.isSuperAdmin && (
-  <span title="Super Admin">
-    <ShieldCheck size={16} className="text-yellow-400" />
-  </span>
-)}                </div>
-                <div className="text-xs text-itec-sky truncate mt-0.5">{user?.email}</div>
+                <div className="font-bold text-white text-sm flex items-center justify-between gap-2">
+                  <span className="truncate">{user?.nom}</span>
+                  {user?.isSuperAdmin && (
+                    <span title="Super Admin">
+                      <ShieldCheck size={16} className="text-yellow-400 shrink-0" />
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-itec-sky truncate mt-0.5">
+                  {user?.email}
+                </div>
                 <div className="mt-2 text-[10px] font-bold uppercase tracking-wider text-white/40 bg-white/5 px-2 py-1 rounded w-fit">
                   {user?.isSuperAdmin ? '👑 Super Admin' : '👤 Collaborateur'}
                 </div>
@@ -145,13 +158,15 @@ export default function Navbar() {
                   onClick={() => setOpenProfile(false)}
                   className="flex items-center gap-2 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 p-2 rounded-lg transition"
                 >
-                  <CheckCircle2 size={16} className="text-itec-sky" /> Mon Tableau de bord
+                  <CheckCircle2 size={16} className="text-itec-sky" />
+                  Mon Tableau de bord
                 </Link>
                 <button
                   onClick={logout}
                   className="w-full flex items-center gap-2 text-xs font-semibold text-red-400 hover:bg-red-500/20 p-2 rounded-lg transition text-left"
                 >
-                  <LogOut size={16} /> Se déconnecter
+                  <LogOut size={16} />
+                  Se déconnecter
                 </button>
               </div>
             </div>
