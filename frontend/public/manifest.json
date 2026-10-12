@@ -1,12 +1,11 @@
 {
   "name": "ITEC Discuss",
   "short_name": "ITEC",
-  "description": "Espace privé collaboratif ITEC — projets, tâches et discussions",
+  "description": "Espace privé collaboratif ITEC",
   "start_url": "/dashboard",
   "display": "standalone",
   "background_color": "#0A2540",
   "theme_color": "#0A2540",
-  "orientation": "portrait-primary",
   "icons": [
     {
       "src": "/icon-192.png",
