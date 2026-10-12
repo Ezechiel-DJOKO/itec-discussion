@@ -22,7 +22,7 @@ export default function LandingPage() {
         
         {/* LOGO */}
         <img 
-          src="/logo-itec.jpg" 
+          src="/logo.jpg" 
           alt="ITEC Logo" 
           className="h-16 w-auto rounded-xl shadow-md object-contain"
         />

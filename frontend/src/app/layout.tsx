@@ -15,8 +15,8 @@ export const metadata: Metadata = {
     telephone: false,
   },
   icons: {
-    icon: '/logo-itec.jpg',
-    apple: '/logo-itec.jpg',
+    icon: '/logo.jpg',
+    apple: '/logo.jpg',
   },
   manifest: '/manifest.json',
 };

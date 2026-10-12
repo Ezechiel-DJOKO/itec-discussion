@@ -42,7 +42,7 @@ export default function Navbar() {
       
       {/* LOGO ITEC */}
       <Link href="/dashboard" className="flex items-center gap-3 hover:opacity-80 transition">
-        <img src="/logo-itec.jpg" alt="ITEC Logo" className="h-9 w-auto rounded-lg shadow-md object-contain" />
+        <img src="/logo.jpg" alt="ITEC Logo" className="h-9 w-auto rounded-lg shadow-md object-contain" />
         <span className="text-lg font-bold text-white tracking-wide hidden sm:block">
           ITEC Discuss
         </span>

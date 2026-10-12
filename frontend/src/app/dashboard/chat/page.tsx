@@ -44,9 +44,7 @@ export default function GlobalChatPage() {
   const [erreur, setErreur] = useState('');
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
   const [menuMsgId, setMenuMsgId] = useState<string | null>(null);
-  const [forwardMessage, setForwardMessage] = useState<ChatMessage | null>(
-    null,
-  );
+  const [forwardMessage, setForwardMessage] = useState<ChatMessage | null>(null);
   const [myProjects, setMyProjects] = useState<any[]>([]);
   const [uploading, setUploading] = useState(false);
 
@@ -62,9 +60,7 @@ export default function GlobalChatPage() {
     if (!user) return;
     api.get('/projects').then((res) => {
       const isChef = res.data.some((p: any) =>
-        p.membres?.some(
-          (m: any) => m.userId === user.id && m.role === 'chef',
-        ),
+        p.membres?.some((m: any) => m.userId === user.id && m.role === 'chef'),
       );
       setIsResponsable(!!user.isSuperAdmin || isChef);
       setMyProjects(res.data.filter((p: any) => p.statut !== 'archive'));
@@ -259,10 +255,10 @@ export default function GlobalChatPage() {
           href={`${baseURL}${pathUrl}?token=${token}`}
           download={fileName}
           target="_blank"
-          className="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-xl"
+          className="flex items-center gap-2 bg-white/20 px-3 py-2 rounded-xl"
         >
-          <Download size={18} />
-          <span className="text-sm font-bold truncate max-w-[180px]">
+          <Download size={16} />
+          <span className="text-sm font-bold truncate max-w-[150px] sm:max-w-[200px]">
             {fileName || 'Document'}
           </span>
         </a>
@@ -283,82 +279,75 @@ export default function GlobalChatPage() {
     <div className="min-h-screen flex flex-col">
       <Navbar />
 
-      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-8 py-6 flex flex-col h-[calc(100vh-80px)]">
-        <div className="flex gap-3 mb-4">
+      <main className="flex-1 max-w-5xl w-full mx-auto p-4 flex flex-col h-[calc(100vh-80px)]">
+        
+        {/* ONGLET DES CHANNELS */}
+        <div className="flex gap-2 sm:gap-3 mb-4 overflow-x-auto pb-1 hide-scrollbar">
           <button
             onClick={() => setActiveChannel('global')}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition ${
+            className={`flex items-center gap-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm transition whitespace-nowrap ${
               activeChannel === 'global'
                 ? 'bg-itec-sky text-[#0A2540]'
-                : 'glass-card text-white/50 hover:text-white'
+                : 'bg-white/10 text-white/50 hover:text-white border border-transparent'
             }`}
           >
-            <Globe size={18} /> Général
+            <Globe size={16} /> Général
           </button>
+          
           {isResponsable && (
             <button
               onClick={() => setActiveChannel('responsables')}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition ${
+              className={`flex items-center gap-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm transition whitespace-nowrap ${
                 activeChannel === 'responsables'
                   ? 'bg-orange-500 text-white'
-                  : 'glass-card text-white/50 hover:text-white'
+                  : 'bg-white/10 text-white/50 hover:text-white border border-transparent'
               }`}
             >
-              <Lock size={18} /> QG Responsables
+              <Lock size={16} /> QG Responsables
             </button>
           )}
         </div>
 
-        <div className="flex-1 glass-card flex flex-col overflow-hidden">
-          <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-5">
+        {/* 🔴 FOND OPAQUE BG-[#0A2540] */}
+        <div className="flex-1 flex flex-col overflow-hidden bg-[#0A2540] rounded-2xl shadow-xl border border-white/20">
+          
+          {/* ZONE DES MESSAGES */}
+          <div className="flex-1 p-3 sm:p-6 overflow-y-auto space-y-4">
             {loading ? (
               <p className="text-center text-white/40 mt-10">Chargement…</p>
             ) : erreur ? (
               <p className="text-center text-red-400 mt-10 font-bold">{erreur}</p>
             ) : messages.length === 0 ? (
-              <p className="text-center text-white/40 mt-10 italic">
-                Aucun message
-              </p>
+              <p className="text-center text-white/40 mt-10 italic">Aucun message</p>
             ) : (
               messages.map((m) => {
                 const isMe = m.userId === user?.id;
                 return (
-                  <div
-                    key={m.id}
-                    className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
-                  >
+                  <div key={m.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                    
                     <div className="flex items-center gap-2 mb-1 px-1">
-                      <span
-                        className={`text-xs font-bold ${isMe ? 'text-itec-sky' : 'text-white'}`}
-                      >
+                      <span className={`text-[10px] sm:text-xs font-bold ${isMe ? 'text-itec-sky' : 'text-white'}`}>
                         {isMe ? 'Vous' : m.user?.nom || 'Inconnu'}
                       </span>
-                      <span className="text-[10px] text-white/40">
-                        {new Date(m.creeLe).toLocaleTimeString('fr-FR', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
+                      <span className="text-[9px] text-white/40">
+                        {new Date(m.creeLe).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                       </span>
                       {m.isEdited && !m.isDeleted && (
-                        <span className="text-[9px] text-white/30 italic">
-                          modifié
-                        </span>
+                        <span className="text-[9px] text-white/30 italic">modifié</span>
                       )}
                     </div>
 
-                    <div className="relative flex items-end gap-1 max-w-[85%]">
+                    <div className="relative flex items-end gap-1 max-w-[90%] sm:max-w-[80%]">
                       <button
                         type="button"
-                        onClick={() =>
-                          setMenuMsgId(menuMsgId === m.id ? null : m.id)
-                        }
+                        onClick={() => setMenuMsgId(menuMsgId === m.id ? null : m.id)}
                         className={`p-1 text-white/40 hover:text-white ${isMe ? 'order-first' : 'order-last'}`}
                       >
                         <MoreVertical size={14} />
                       </button>
 
                       <div
-                        className={`px-4 py-2.5 rounded-2xl text-sm break-words ${
+                        className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl text-xs sm:text-sm break-words ${
                           m.isDeleted
                             ? 'bg-white/5 text-white/40 italic'
                             : isMe
@@ -369,46 +358,36 @@ export default function GlobalChatPage() {
                         {parseMessage(m.message)}
                       </div>
 
+                      {/* MENU ACTIONS MSG */}
                       {menuMsgId === m.id && (
-                        <div
-                          className={`absolute z-30 top-0 ${isMe ? 'right-8' : 'left-8'} glass-card bg-[#0A2540] border border-white/20 p-1.5 min-w-[150px]`}
-                        >
-                          <button
-                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white hover:bg-white/10 rounded-lg"
-                            onClick={() => handleCopy(m)}
-                          >
-                            <Copy size={14} /> Copier
-                          </button>
-                          <button
-                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white hover:bg-white/10 rounded-lg"
-                            onClick={() => {
-                              setForwardMessage(m);
-                              setMenuMsgId(null);
-                            }}
-                          >
-                            <Forward size={14} /> Transférer
-                          </button>
-                          {isMe &&
-                            !m.isDeleted &&
-                            !m.message.startsWith('[') && (
-                              <button
-                                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white hover:bg-white/10 rounded-lg"
-                                onClick={() => handleEdit(m)}
-                              >
-                                <Edit2 size={14} /> Modifier
+                        <div className={`absolute z-30 top-0 ${isMe ? 'right-6' : 'left-6'} bg-[#0A2540] border border-white/20 p-1.5 min-w-[130px] rounded-lg shadow-xl`}>
+                          
+                          {/* 🔴 ACTIONS BLOQUÉES SI MSG SUPPRIMÉ */}
+                          {!m.isDeleted && (
+                            <>
+                              <button className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-white hover:bg-white/10 rounded" onClick={() => handleCopy(m)}>
+                                <Copy size={12} /> Copier
                               </button>
-                            )}
+                              <button className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-white hover:bg-white/10 rounded" onClick={() => { setForwardMessage(m); setMenuMsgId(null); }}>
+                                <Forward size={12} /> Transférer
+                              </button>
+                              {isMe && !m.message.startsWith('[') && (
+                                <button className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-white hover:bg-white/10 rounded" onClick={() => handleEdit(m)}>
+                                  <Edit2 size={12} /> Modifier
+                                </button>
+                              )}
+                            </>
+                          )}
+                          
                           {isMe && !m.isDeleted && (
-                            <button
-                              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-400 hover:bg-red-500/20 rounded-lg"
-                              onClick={() => handleDelete(m.id)}
-                            >
-                              <Trash2 size={14} /> Supprimer
+                            <button className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-red-400 hover:bg-red-500/20 rounded" onClick={() => handleDelete(m.id)}>
+                              <Trash2 size={12} /> Supprimer
                             </button>
                           )}
                         </div>
                       )}
                     </div>
+
                   </div>
                 );
               })
@@ -416,135 +395,75 @@ export default function GlobalChatPage() {
             <div ref={endRef} />
           </div>
 
-          <form
-            onSubmit={envoyerTexte}
-            className="p-4 bg-black/20 border-t border-white/10 space-y-3"
-          >
+          {/* ZONE DE TEXTE & BOUTONS */}
+          <form onSubmit={envoyerTexte} className="p-2 sm:p-3 bg-black/30 border-t border-white/10 space-y-2">
+            
             {editingMsgId && (
-              <div className="flex justify-between text-xs text-itec-sky bg-white/5 px-3 py-1.5 rounded-lg">
-                <span>Modification…</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingMsgId(null);
-                    setTexte('');
-                  }}
-                >
-                  ✕
-                </button>
+              <div className="flex justify-between items-center text-xs text-itec-sky bg-white/5 px-3 py-1.5 rounded-lg">
+                <span>Modification...</span>
+                <button type="button" onClick={() => { setEditingMsgId(null); setTexte(''); }}>✕</button>
               </div>
             )}
 
-            <div className="flex gap-3 items-center">
-              <input
-                ref={imageInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  if (e.target.files?.[0])
-                    handleFileUpload(e.target.files[0], '[IMAGE]');
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => imageInputRef.current?.click()}
-                className="p-2.5 bg-white/5 text-itec-sky rounded-xl"
-              >
-                <ImageIcon size={20} />
+            <div className="flex gap-2 items-center px-1">
+              <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { if (e.target.files?.[0]) handleFileUpload(e.target.files[0], '[IMAGE]'); }} />
+              <button type="button" onClick={() => imageInputRef.current?.click()} className="p-2 bg-white/5 text-itec-sky rounded-lg">
+                <ImageIcon size={16} />
               </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf,.zip,.doc,.docx,.xls,.xlsx,.txt"
-                className="hidden"
-                onChange={(e) => {
-                  if (e.target.files?.[0])
-                    handleFileUpload(e.target.files[0], '[FILE]');
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="p-2.5 bg-white/5 text-itec-sky rounded-xl"
-              >
-                <Paperclip size={20} />
+              
+              <input ref={fileInputRef} type="file" accept=".pdf,.zip,.doc,.docx,.xls,.xlsx,.txt" className="hidden" onChange={(e) => { if (e.target.files?.[0]) handleFileUpload(e.target.files[0], '[FILE]'); }} />
+              <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2 bg-white/5 text-itec-sky rounded-lg">
+                <Paperclip size={16} />
               </button>
+              
               <div className="flex-1" />
-              <button
-                type="button"
-                onMouseDown={startRecording}
-                onMouseUp={handleStopRecording}
-                onTouchStart={startRecording}
-                onTouchEnd={handleStopRecording}
-                className={`p-2.5 rounded-xl ${
-                  isRecording
-                    ? 'bg-red-500 text-white animate-pulse'
-                    : 'bg-white/5 text-itec-sky'
-                }`}
-              >
-                <Mic size={20} />
+              
+              <button type="button" onMouseDown={startRecording} onMouseUp={handleStopRecording} onTouchStart={startRecording} onTouchEnd={handleStopRecording} className={`p-2 rounded-lg ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-white/5 text-itec-sky'}`}>
+                <Mic size={16} />
               </button>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex gap-2">
               <input
                 type="text"
                 value={texte}
                 onChange={(e) => setTexte(e.target.value)}
                 disabled={!!erreur || uploading || isRecording}
-                placeholder={`Écrire dans #${activeChannel}…`}
-                className="glass-input flex-1 px-5 py-3 rounded-xl text-sm"
+                placeholder={uploading ? 'Envoi...' : 'Votre message...'}
+                className="bg-white/10 flex-1 px-3 sm:px-4 py-2 rounded-lg text-sm text-white outline-none focus:border focus:border-itec-sky border border-transparent disabled:opacity-50"
               />
               <button
                 type="submit"
-                disabled={
-                  !!erreur || uploading || isRecording || !texte.trim()
-                }
-                className="bg-itec-sky text-[#0A2540] rounded-xl px-5 font-black disabled:opacity-50 flex items-center gap-2"
+                disabled={!!erreur || uploading || isRecording || !texte.trim()}
+                className="bg-itec-sky text-[#0A2540] rounded-lg w-10 h-10 flex items-center justify-center shrink-0 disabled:opacity-50"
               >
-                <Send size={18} /> Envoyer
+                <Send size={16} />
               </button>
             </div>
           </form>
+
         </div>
       </main>
 
+      {/* Modal Transférer */}
       {forwardMessage && (
         <div className="fixed inset-0 bg-black/70 z-[70] flex items-center justify-center p-4">
           <div className="glass-card bg-[#0A2540] w-full max-w-sm p-5 space-y-3 border border-white/20">
             <h3 className="font-bold text-white text-sm">Transférer vers…</h3>
-            <button
-              className="w-full text-left px-3 py-2.5 bg-white/10 rounded-xl text-sm text-white"
-              onClick={() =>
-                handleForward('channel', 'global', '#Général')
-              }
-            >
+            <button className="w-full text-left px-3 py-2.5 bg-white/10 hover:bg-white/15 rounded-xl text-sm text-white" onClick={() => handleForward('channel', 'global', '#Général')}>
               🌍 Chat Général
             </button>
-            <button
-              className="w-full text-left px-3 py-2.5 bg-white/10 rounded-xl text-sm text-white"
-              onClick={() =>
-                handleForward('channel', 'responsables', '#Responsables')
-              }
-            >
-              🔒 QG Responsables
-            </button>
+            {isResponsable && (
+              <button className="w-full text-left px-3 py-2.5 bg-white/10 hover:bg-white/15 rounded-xl text-sm text-white" onClick={() => handleForward('channel', 'responsables', '#Responsables')}>
+                🔒 QG Responsables
+              </button>
+            )}
             {myProjects.map((p) => (
-              <button
-                key={p.id}
-                className="w-full text-left px-3 py-2.5 bg-white/10 rounded-xl text-sm text-white"
-                onClick={() => handleForward('project', p.id, p.nom)}
-              >
+              <button key={p.id} className="w-full text-left px-3 py-2.5 bg-white/10 hover:bg-white/15 rounded-xl text-sm text-white" onClick={() => handleForward('project', p.id, p.nom)}>
                 📁 {p.nom}
               </button>
             ))}
-            <button
-              onClick={() => setForwardMessage(null)}
-              className="w-full py-2 text-white/50 text-sm"
-            >
-              Annuler
-            </button>
+            <button onClick={() => setForwardMessage(null)} className="w-full py-2 text-white/50 text-sm">Annuler</button>
           </div>
         </div>
       )}

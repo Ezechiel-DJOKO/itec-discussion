@@ -34,7 +34,7 @@ export default function LoginPage() {
       <div className="glass-card p-8 sm:p-10 w-full max-w-md relative z-10">
         <div className="flex justify-center mb-6">
 <img 
-  src="/logo-itec.jpg" 
+  src="/logo.jpg" 
   alt="ITEC Logo" 
   className="h-16 w-auto rounded-xl shadow-md object-contain"
 />        </div>
