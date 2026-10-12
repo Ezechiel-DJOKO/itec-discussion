@@ -13,7 +13,7 @@ import { MessagesModule } from './messages/messages.module.js';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    TypeOrmModule.forRootAsync({
+        TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
@@ -25,6 +25,8 @@ import { MessagesModule } from './messages/messages.module.js';
         database: config.get('DB_DATABASE'),
         autoLoadEntities: true,
         synchronize: true,
+        // 🔴 OBLIGATOIRE POUR SUPABASE EN PRODUCTION :
+        ssl: config.get('NODE_ENV') === 'production' ? { rejectUnauthorized: false } : false,
       }),
     }),
     AuthModule,
