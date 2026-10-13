@@ -6,7 +6,7 @@ import Cookies from 'js-cookie';
 import { User } from '@/types';
 import {
   MessageSquare, X, Send, Mic, Image as ImageIcon,
-  Paperclip, Download, Edit2, Trash2, Copy, Forward, MoreVertical,
+  Paperclip, Download, Edit2, Trash2, Copy, Forward, ChevronDown, Trash
 } from 'lucide-react';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { getSocket } from '@/lib/socket';
@@ -25,26 +25,49 @@ export default function ProjectChat({ projectId, currentUser }: { projectId: str
   const [forwardMessage, setForwardMessage] = useState<Message | null>(null);
   const [myProjects, setMyProjects] = useState<any[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
+
+  // Chrono vocal
+  const { isRecording, startRecording, stopRecording, cancelRecording } = useAudioRecorder();
+  const [chrono, setChrono] = useState(0);
 
   const endRef = useRef<HTMLDivElement>(null);
+  const chatBoxRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const { isRecording, startRecording, stopRecording } = useAudioRecorder();
+  const pressTimer = useRef<NodeJS.Timeout | null>(null);
 
-  const scrollBottom = () => setTimeout(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), 80);
+  const scrollBottom = () => endRef.current?.scrollIntoView({ behavior: 'smooth' });
+
+  // Chronomètre
+  useEffect(() => {
+    let interval: any;
+    if (isRecording) {
+      setChrono(0);
+      interval = setInterval(() => setChrono(p => p + 1), 1000);
+    } else {
+      clearInterval(interval);
+    }
+    return () => clearInterval(interval);
+  }, [isRecording]);
+
+  const formatChrono = (secs: number) => {
+    const m = Math.floor(secs / 60).toString().padStart(2, '0');
+    const s = (secs % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
 
   useEffect(() => {
     if (!open || !projectId) return;
-
     api.get(`/projects/${projectId}/messages`).then((res) => {
       setMessages(res.data);
-      scrollBottom();
+      setTimeout(scrollBottom, 100);
     });
 
     const socket = getSocket();
     const onNew = (newMsg: Message) => {
       setMessages((prev) => { if (prev.some((m) => m.id === newMsg.id)) return prev; return [...prev, newMsg]; });
-      scrollBottom();
+      setTimeout(scrollBottom, 100);
     };
     const onUpdate = (updated: Message) => setMessages((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
 
@@ -57,9 +80,21 @@ export default function ProjectChat({ projectId, currentUser }: { projectId: str
     };
   }, [open, projectId]);
 
-  useEffect(() => {
-    if (forwardMessage) api.get('/projects').then((res) => setMyProjects(res.data.filter((p: any) => p.statut !== 'archive')));
-  }, [forwardMessage]);
+  const handleScroll = (e: any) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.target;
+    setShowScrollBtn(scrollHeight - scrollTop > clientHeight + 150);
+  };
+
+  // APPUI LONG (WhatsApp style)
+  const handlePressStart = (id: string) => {
+    pressTimer.current = setTimeout(() => {
+      if (navigator.vibrate) navigator.vibrate(50); // Vibration mobile
+      setMenuMsgId(id);
+    }, 500); // 500ms
+  };
+  const handlePressEnd = () => {
+    if (pressTimer.current) clearTimeout(pressTimer.current);
+  };
 
   const envoyerTexte = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,7 +137,10 @@ export default function ProjectChat({ projectId, currentUser }: { projectId: str
     } catch { alert('Erreur'); }
   };
 
-  const handleStopRecording = async () => { const audioFile = await stopRecording(); if (audioFile) handleFileUpload(audioFile, '[AUDIO]'); };
+  const handleStopRecording = async () => { 
+    const audioFile = await stopRecording(); 
+    if (audioFile) handleFileUpload(audioFile, '[AUDIO]'); 
+  };
 
   const handleFileUpload = async (file: File, tag: '[AUDIO]' | '[IMAGE]' | '[FILE]') => {
     if (file.size > 10 * 1024 * 1024) return alert('Max 10 Mo');
@@ -116,106 +154,83 @@ export default function ProjectChat({ projectId, currentUser }: { projectId: str
     } catch { alert("Erreur d'envoi"); } finally { setUploading(false); }
   };
 
-    const parseMessage = (msg: string) => {
+  const parseMessage = (msg: string) => {
     const token = Cookies.get('token');
     const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    const resolveUrl = (pathUrl: string) => (pathUrl.startsWith('http') ? pathUrl : `${baseURL}${pathUrl}?token=${token}`);
 
-    // 🔴 HELPER POUR LES URLS (Cloudinary = direct, Local = on rajoute le backend + token)
-    const resolveUrl = (pathUrl: string) => {
-      if (pathUrl.startsWith('http://') || pathUrl.startsWith('https://')) {
-        return pathUrl; // Cloudinary
-      }
-      return `${baseURL}${pathUrl}?token=${token}`; // Ancien mode local
-    };
-
-    if (msg.startsWith('[TRANSFERT]')) {
-      return (
-        <div className="space-y-1">
-          <div className="text-[10px] uppercase opacity-70 border-l-2 border-white/40 pl-2">Transféré</div>
-          <div>{parseMessage(msg.replace('[TRANSFERT]', '').trim())}</div>
-        </div>
-      );
-    }
-
-    if (msg.startsWith('[AUDIO]')) {
-      const pathUrl = msg.replace('[AUDIO]', '');
-      return <audio controls src={resolveUrl(pathUrl)} className="w-48 sm:w-64 h-10 rounded-lg outline-none" />;
-    }
-
-    if (msg.startsWith('[IMAGE]')) {
-      const pathUrl = msg.replace('[IMAGE]', '');
-      const src = resolveUrl(pathUrl);
-      return <img src={src} alt="Image envoyée" className="max-w-[200px] sm:max-w-xs rounded-lg cursor-pointer hover:opacity-90 transition shadow-sm" onClick={() => window.open(src, '_blank')} />;
-    }
-
+    if (msg.startsWith('[TRANSFERT]')) return (
+      <div className="space-y-0.5"><div className="text-[9px] uppercase opacity-70 border-l-2 border-white/40 pl-1.5">Transféré</div><div>{parseMessage(msg.replace('[TRANSFERT]', '').trim())}</div></div>
+    );
+    // onPlay stopPropagtion empéche le bug du scroll audio
+    if (msg.startsWith('[AUDIO]')) return <audio controls src={resolveUrl(msg.replace('[AUDIO]', ''))} className="w-48 h-8 rounded outline-none" onPlay={(e) => e.stopPropagation()} />;
+    if (msg.startsWith('[IMAGE]')) return <img src={resolveUrl(msg.replace('[IMAGE]', ''))} alt="Img" className="max-w-[200px] rounded cursor-pointer" onClick={() => window.open(resolveUrl(msg.replace('[IMAGE]', '')), '_blank')} />;
     if (msg.startsWith('[FILE]')) {
-      const content = msg.replace('[FILE]', '');
-      const [pathUrl, fileName] = content.split('|');
+      const [pathUrl, fileName] = msg.replace('[FILE]', '').split('|');
       return (
-        <a href={resolveUrl(pathUrl)} download={fileName} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-xl transition shadow-sm w-fit">
-          <Download size={18}/>
-          <span className="text-sm font-bold truncate max-w-[150px]">{fileName || 'Document'}</span>
+        <a href={resolveUrl(pathUrl)} download={fileName} target="_blank" className="flex items-center gap-1.5 bg-white/20 px-2 py-1.5 rounded-lg text-white">
+          <Download size={14} /> <span className="text-xs font-bold truncate max-w-[120px]">{fileName || 'Document'}</span>
         </a>
       );
     }
-
     return <span className="whitespace-pre-wrap">{msg}</span>;
   };
 
   return (
-    <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50">
+    <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[60]">
       {!open && (
-        <button onClick={() => setOpen(true)} className="bg-gradient-to-r from-itec-sky to-blue-500 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-[0_0_20px_rgba(79,195,247,0.4)]">
+        <button onClick={() => setOpen(true)} className="bg-gradient-to-r from-itec-sky to-blue-500 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-lg transition-transform hover:scale-110">
           <MessageSquare size={24} />
         </button>
       )}
 
       {open && (
-        // 🔴 FOND SOLIDE (#0A2540) ET LARGEUR ADAPTÉE MOBILE
-        <div className="w-[calc(100vw-2rem)] sm:w-[400px] h-[500px] sm:h-[560px] flex flex-col rounded-2xl overflow-hidden bg-[#0A2540] border border-white/20 shadow-2xl">
-          <div className="bg-black/30 p-3 flex justify-between items-center border-b border-white/10">
+        <div className="w-[calc(100vw-2rem)] sm:w-[360px] h-[75vh] sm:h-[500px] flex flex-col rounded-2xl overflow-hidden bg-[#0A2540] border border-white/20 shadow-2xl">
+          <div className="bg-[#0A2540] p-3 flex justify-between items-center border-b border-white/10 z-10">
             <h3 className="font-bold text-white flex items-center gap-2 text-sm"><MessageSquare size={16} /> Chat Équipe</h3>
             <button onClick={() => setOpen(false)} className="text-white/60 hover:text-white"><X size={20} /></button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-3 space-y-4">
+          {/* ZONE MESSAGES */}
+          <div ref={chatBoxRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-3 space-y-2 relative bg-[#07192f] bg-[url('/bg-pattern.png')] bg-opacity-10">
             {messages.map((m) => {
               const isMe = m.userId === currentUser?.id;
               return (
                 <div key={m.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-                  <div className="flex items-center gap-2 mb-1 px-1">
-                    <span className={`text-[10px] font-bold ${isMe ? 'text-itec-sky' : 'text-white'}`}>{isMe ? 'Vous' : m.user?.nom}</span>
-                    <span className="text-[9px] text-white/40">{new Date(m.creeLe).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
-                    {m.isEdited && !m.isDeleted && <span className="text-[9px] text-white/30 italic">modifié</span>}
-                  </div>
-
+                  {!isMe && <span className="text-[9px] font-bold text-itec-sky mb-0.5 px-1">{m.user?.nom}</span>}
+                  
                   <div className="relative flex items-end gap-1 max-w-[90%]">
-                    {/* MENU POINTS (⋯) */}
-                    <button onClick={() => setMenuMsgId(menuMsgId === m.id ? null : m.id)} className={`p-1 text-white/40 hover:text-white ${isMe ? 'order-first' : 'order-last'}`}>
-                      <MoreVertical size={14} />
-                    </button>
-
-                    <div className={`px-3 py-2 rounded-2xl text-xs sm:text-sm break-words ${m.isDeleted ? 'bg-white/5 text-white/40 italic' : isMe ? 'bg-gradient-to-r from-itec-sky to-blue-500 text-white rounded-br-sm' : 'bg-white/10 text-white rounded-bl-sm border border-white/5'}`}>
+                    {/* APPUI LONG SUR LA BULLE */}
+                    <div 
+                      onTouchStart={() => handlePressStart(m.id)} onTouchEnd={handlePressEnd} onTouchMove={handlePressEnd}
+                      onMouseDown={() => handlePressStart(m.id)} onMouseUp={handlePressEnd} onMouseLeave={handlePressEnd}
+                      className={`px-3 py-1.5 rounded-2xl text-[13px] break-words shadow-sm transition-all select-none ${m.isDeleted ? 'bg-white/5 text-white/40 italic' : isMe ? 'bg-[#005c4b] text-white rounded-tr-sm' : 'bg-[#202c33] text-white rounded-tl-sm'}`}
+                    >
                       {parseMessage(m.message)}
+                      
+                      {/* L'heure DANS la bulle en bas à droite (vrai style WhatsApp) */}
+                      <div className="text-[9px] text-white/50 text-right mt-0.5 flex justify-end items-center gap-1">
+                        {m.isEdited && !m.isDeleted && <span className="italic">modifié</span>}
+                        {new Date(m.creeLe).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                      </div>
                     </div>
 
-                    {/* ACTIONS SUR LE MESSAGE */}
+                    {/* MENU ACTIONS (Ouvrable avec l'appui long) */}
                     {menuMsgId === m.id && (
-                      <div className={`absolute z-30 top-0 ${isMe ? 'right-6' : 'left-6'} bg-[#0A2540] border border-white/20 p-1.5 min-w-[120px] rounded-lg shadow-xl`}>
-                        {/* 🔴 CONDITION : ON CACHE SI MESSAGE SUPPRIMÉ */}
+                      <div className={`absolute z-30 top-6 ${isMe ? 'right-0' : 'left-0'} bg-[#233138] border border-white/10 p-1 min-w-[140px] rounded-lg shadow-xl`}>
                         {!m.isDeleted && (
                           <>
-                            <button className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-white hover:bg-white/10 rounded" onClick={() => handleCopy(m)}><Copy size={12} /> Copier</button>
-                            <button className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-white hover:bg-white/10 rounded" onClick={() => { setForwardMessage(m); setMenuMsgId(null); }}><Forward size={12} /> Transférer</button>
+                            <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white hover:bg-white/10 rounded" onClick={() => handleCopy(m)}><Copy size={14} /> Copier</button>
+                            <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white hover:bg-white/10 rounded" onClick={() => { setForwardMessage(m); setMenuMsgId(null); api.get('/projects').then(res=>setMyProjects(res.data)); }}><Forward size={14} /> Transférer</button>
                             {isMe && !m.message.startsWith('[') && (
-                              <button className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-white hover:bg-white/10 rounded" onClick={() => handleEdit(m)}><Edit2 size={12} /> Modifier</button>
+                              <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white hover:bg-white/10 rounded" onClick={() => handleEdit(m)}><Edit2 size={14} /> Modifier</button>
                             )}
                           </>
                         )}
-                        {/* SUPPRIMER RESTE VISIBLE POUR LE PROPRIETAIRE */}
                         {isMe && !m.isDeleted && (
-                          <button className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-red-400 hover:bg-red-500/20 rounded" onClick={() => handleDelete(m.id)}><Trash2 size={12} /> Supprimer</button>
+                          <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-400 hover:bg-red-500/20 rounded" onClick={() => handleDelete(m.id)}><Trash2 size={14} /> Supprimer</button>
                         )}
+                        <button className="w-full text-center py-1 mt-1 text-[10px] text-white/30 border-t border-white/5" onClick={() => setMenuMsgId(null)}>Fermer</button>
                       </div>
                     )}
                   </div>
@@ -225,22 +240,59 @@ export default function ProjectChat({ projectId, currentUser }: { projectId: str
             <div ref={endRef} />
           </div>
 
-          <form onSubmit={envoyerTexte} className="p-2 bg-black/30 border-t border-white/10 space-y-2">
-            <div className="flex gap-2 items-center px-1">
-              <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { if (e.target.files?.[0]) handleFileUpload(e.target.files[0], '[IMAGE]'); }} />
-              <button type="button" onClick={() => imageInputRef.current?.click()} className="p-2 bg-white/5 text-itec-sky rounded-lg"><ImageIcon size={16} /></button>
+          {/* BOUTON SCROLL BOTTOM */}
+          {showScrollBtn && (
+            <button onClick={scrollBottom} className="absolute bottom-16 right-4 bg-[#202c33] text-white p-2 rounded-full shadow-lg border border-white/10 opacity-90 hover:opacity-100 transition z-20">
+              <ChevronDown size={20} />
+            </button>
+          )}
 
-              <input ref={fileInputRef} type="file" accept=".pdf,.zip,.doc,.docx,.xls,.xlsx,.txt" className="hidden" onChange={(e) => { if (e.target.files?.[0]) handleFileUpload(e.target.files[0], '[FILE]'); }} />
-              <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2 bg-white/5 text-itec-sky rounded-lg"><Paperclip size={16} /></button>
-              
-              <div className="flex-1" />
+          {/* ZONE DE TEXTE COMPACTE */}
+          <form onSubmit={envoyerTexte} className="p-2 bg-[#0A2540] border-t border-white/5 flex gap-1 items-end relative">
+            
+            {editingMsgId && (
+              <div className="absolute -top-8 left-0 right-0 bg-[#202c33] px-3 py-1.5 flex justify-between items-center text-xs text-itec-sky border-t border-white/10">
+                <span>Modification...</span>
+                <button type="button" onClick={() => { setEditingMsgId(null); setTexte(''); }}><X size={14}/></button>
+              </div>
+            )}
 
-              <button type="button" onMouseDown={startRecording} onMouseUp={handleStopRecording} onTouchStart={startRecording} onTouchEnd={handleStopRecording} className={`p-2 rounded-lg ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-white/5 text-itec-sky'}`}><Mic size={16} /></button>
-            </div>
+            {isRecording ? (
+              // 🔴 INTERFACE D'ENREGISTREMENT VOCAL
+              <div className="flex-1 bg-[#202c33] rounded-full px-4 py-2.5 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-red-400 animate-pulse">
+                  <Mic size={16} /> <span className="text-sm font-mono">{formatChrono(chrono)}</span>
+                </div>
+                <button type="button" onClick={cancelRecording} className="text-white/40 hover:text-red-400 p-1"><Trash size={16}/></button>
+              </div>
+            ) : (
+              <div className="flex-1 bg-[#202c33] rounded-3xl px-2 py-1 flex items-end min-h-[40px]">
+                {/* Icônes masquées si on tape du texte */}
+                {!texte && (
+                  <div className="flex items-center pb-1">
+                    <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { if (e.target.files?.[0]) handleFileUpload(e.target.files[0], '[IMAGE]'); }} />
+                    <button type="button" onClick={() => imageInputRef.current?.click()} disabled={uploading} className="p-2 text-white/50 hover:text-white"><ImageIcon size={18} /></button>
+                    
+                    <input ref={fileInputRef} type="file" accept=".pdf,.zip,.doc,.docx,.xls,.xlsx,.txt" className="hidden" onChange={(e) => { if (e.target.files?.[0]) handleFileUpload(e.target.files[0], '[FILE]'); }} />
+                    <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="p-2 text-white/50 hover:text-white"><Paperclip size={18} /></button>
+                  </div>
+                )}
 
-            <div className="flex gap-2">
-              <input type="text" value={texte} onChange={(e) => setTexte(e.target.value)} disabled={!!editingMsgId && uploading} placeholder={editingMsgId ? "Modifier..." : "Votre message..."} className="w-full bg-white/10 px-3 py-2 rounded-lg text-sm text-white outline-none focus:border-itec-sky border border-transparent" />
-              <button type="submit" disabled={isRecording || uploading || !texte.trim()} className="bg-itec-sky text-[#0A2540] rounded-lg w-10 h-10 flex items-center justify-center shrink-0"><Send size={16} /></button>
+                <input type="text" value={texte} onChange={(e) => setTexte(e.target.value)} disabled={uploading} placeholder={uploading ? "Envoi..." : "Message"} className="flex-1 bg-transparent px-2 py-2 text-[14px] text-white outline-none w-full placeholder-white/40" />
+              </div>
+            )}
+
+            {/* BOUTON D'ACTION (Micro ou Envoi) */}
+            <div className="shrink-0 mb-0.5 ml-1">
+              {texte || isRecording ? (
+                <button type="button" onClick={isRecording ? handleStopRecording : envoyerTexte} disabled={uploading} className="bg-[#00a884] text-white rounded-full w-10 h-10 flex items-center justify-center shadow-md">
+                  <Send size={18} className="ml-1" />
+                </button>
+              ) : (
+                <button type="button" onClick={startRecording} disabled={uploading} className="bg-[#00a884] text-white rounded-full w-10 h-10 flex items-center justify-center shadow-md hover:scale-105 transition">
+                  <Mic size={20} />
+                </button>
+              )}
             </div>
           </form>
         </div>
@@ -249,31 +301,13 @@ export default function ProjectChat({ projectId, currentUser }: { projectId: str
       {/* Modal Transfert (inchangée) */}
       {forwardMessage && (
         <div className="fixed inset-0 bg-black/70 z-[70] flex items-center justify-center p-4">
-          <div className="glass-card bg-[#0A2540] w-full max-w-sm p-5 space-y-3 border border-white/20">
-            <h3 className="font-bold text-white text-sm">Transférer vers…</h3>
-            <button
-              className="w-full text-left px-3 py-2.5 bg-white/10 hover:bg-white/15 rounded-xl text-sm text-white"
-              onClick={() =>
-                handleForward('channel', 'global', '#Général')
-              }
-            >
-              🌍 Chat Général
-            </button>
+          <div className="bg-[#202c33] w-full max-w-xs p-4 rounded-xl space-y-2 border border-white/10 shadow-2xl">
+            <h3 className="font-bold text-white text-sm mb-2">Transférer à...</h3>
+            <button className="w-full text-left px-3 py-3 bg-white/5 hover:bg-white/10 rounded-lg text-sm text-white" onClick={() => handleForward('channel', 'global', '#Général')}>🌍 Chat Général</button>
             {myProjects.map((p) => (
-              <button
-                key={p.id}
-                className="w-full text-left px-3 py-2.5 bg-white/10 hover:bg-white/15 rounded-xl text-sm text-white"
-                onClick={() => handleForward('project', p.id, p.nom)}
-              >
-                📁 {p.nom}
-              </button>
+              <button key={p.id} className="w-full text-left px-3 py-3 bg-white/5 hover:bg-white/10 rounded-lg text-sm text-white" onClick={() => handleForward('project', p.id, p.nom)}>📁 {p.nom}</button>
             ))}
-            <button
-              onClick={() => setForwardMessage(null)}
-              className="w-full py-2 text-white/50 text-sm"
-            >
-              Annuler
-            </button>
+            <button onClick={() => setForwardMessage(null)} className="w-full py-3 text-white/50 text-sm mt-2">Annuler</button>
           </div>
         </div>
       )}
