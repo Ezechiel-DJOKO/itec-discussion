@@ -16,8 +16,12 @@ export class MessagesController {
   }
 
   @Post('projects/:projectId/messages')
-  addProjectMsg(@Param('projectId') projectId: string, @Body('message') message: string, @Request() req: ReqUser) {
-    return this.msgService.addProjectMessage(projectId, req.user.sub, message);
+  addProjectMsg(
+    @Param('projectId') projectId: string, 
+    @Body() body: { message: string, replyToId?: string }, 
+    @Request() req: ReqUser
+  ) {
+    return this.msgService.addProjectMessage(projectId, req.user.sub, body.message, body.replyToId);
   }
 
   @Get('tasks/:taskId/comments')
@@ -38,10 +42,10 @@ export class MessagesController {
   @Post('channels/:type/messages')
   addChannelMsg(
     @Param('type') type: ChannelType,
-    @Body('message') message: string,
+    @Body() body: { message: string, replyToId?: string },
     @Request() req: ReqUser,
   ) {
-    return this.msgService.addChannelMessage(type, req.user.sub, message);
+    return this.msgService.addChannelMessage(type, req.user.sub, body.message, body.replyToId);
   }
 
     @Patch('projects/messages/:id')

@@ -30,6 +30,12 @@ export class ChannelMessage {
   @Column({ default: false })
   isDeleted: boolean;
 
+    @Column({ type: 'uuid', nullable: true })
+  replyToId: string | null;
+
+  @Column({ type: 'json', nullable: true })
+  replyTo: any | null; // Stockera { id, nom, preview }
+
   @CreateDateColumn()
   creeLe: Date;
 

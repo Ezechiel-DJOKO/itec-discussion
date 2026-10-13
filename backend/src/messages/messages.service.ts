@@ -23,6 +23,23 @@ export class MessagesService {
     @InjectRepository(User) private readonly userRepo: Repository<User>
   ) {}
 
+  // ─── HELPER POUR LE PREVIEW DES RÉPONSES ───
+  private generateReplyPreview(originalMessage: any) {
+    if (!originalMessage || originalMessage.isDeleted) return null;
+    let preview = originalMessage.message;
+    if (preview.startsWith('[')) {
+      if (preview.startsWith('[IMAGE]')) preview = '📷 Image';
+      else if (preview.startsWith('[AUDIO]')) preview = '🎤 Vocal';
+      else if (preview.startsWith('[FILE]')) preview = '📎 Fichier';
+      else if (preview.startsWith('[TRANSFERT]')) preview = '🔄 Message transféré';
+    }
+    return {
+      id: originalMessage.id,
+      nom: originalMessage.user?.nom || 'Inconnu',
+      preview: preview.substring(0, 60) + (preview.length > 60 ? '...' : ''),
+    };
+  }
+
   // ─── CHAT DU PROJET ────────────────────────────────────────
   async getProjectMessages(projectId: string, userId: string) {
     const member = await this.memberRepo.findOne({ where: { projectId, userId } });
@@ -34,14 +51,20 @@ export class MessagesService {
     });
   }
 
-  async addProjectMessage(projectId: string, userId: string, texte: string) {
+  // ─── AJOUTER UN MESSAGE PROJET ───
+  async addProjectMessage(projectId: string, userId: string, texte: string, replyToId?: string) {
     const member = await this.memberRepo.findOne({ where: { projectId, userId } });
     if (!member) throw new ForbiddenException("Non autorisé");
 
-    const msg = await this.msgRepo.save(this.msgRepo.create({ projectId, userId, message: texte }));
-    const savedMsg = await this.msgRepo.findOne({ where: { id: msg.id } }); // Pour avoir la relation User
+    let replyTo = null;
+    if (replyToId) {
+      const original = await this.msgRepo.findOne({ where: { id: replyToId }, relations: { user: true } });
+      replyTo = this.generateReplyPreview(original);
+    }
+
+    const msg = await this.msgRepo.save(this.msgRepo.create({ projectId, userId, message: texte, replyToId, replyTo }));
+    const savedMsg = await this.msgRepo.findOne({ where: { id: msg.id } });
     
-    // 🔥 Diffuser en temps réel
     this.gateway.diffuserProjectMessage(projectId, savedMsg);
     return savedMsg;
   }
@@ -103,18 +126,22 @@ export class MessagesService {
     });
   }
 
-  async addChannelMessage(channel: ChannelType, userId: string, texte: string) {
+  // ─── AJOUTER UN MESSAGE CHANNEL ───
+  async addChannelMessage(channel: ChannelType, userId: string, texte: string, replyToId?: string) {
     if (channel === ChannelType.RESPONSABLES) {
       const isResp = await this.isResponsable(userId);
       if (!isResp) throw new ForbiddenException('Accès réservé aux responsables');
     }
 
-    const msg = await this.channelMsgRepo.save(
-      this.channelMsgRepo.create({ channel, userId, message: texte }),
-    );
+    let replyTo = null;
+    if (replyToId) {
+      const original = await this.channelMsgRepo.findOne({ where: { id: replyToId }, relations: { user: true } });
+      replyTo = this.generateReplyPreview(original);
+    }
+
+    const msg = await this.channelMsgRepo.save(this.channelMsgRepo.create({ channel, userId, message: texte, replyToId, replyTo }));
     const savedMsg = await this.channelMsgRepo.findOne({ where: { id: msg.id } });
 
-    // Diffuser
     this.gateway.diffuserChannelMessage(channel, savedMsg);
     return savedMsg;
   }
