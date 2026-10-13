@@ -12,6 +12,7 @@ import {
 import { UsersService } from './users.service.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
+import { UpdatePasswordDto } from './dto/update-password.dto.js';
 
 interface RequestAvecUser extends Request {
   user: { sub: string; email: string };
@@ -60,5 +61,10 @@ export class UsersController {
     @Request() req: any,
   ) {
     return this.usersService.addPenalty(body.projectId, userId, req.user.sub, body.motif);
+  }
+
+  @Put('me/password')
+  updatePassword(@Request() req: any, @Body() dto: UpdatePasswordDto) {
+    return this.usersService.updatePassword(req.user.sub, dto);
   }
 }

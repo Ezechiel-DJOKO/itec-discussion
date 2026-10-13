@@ -6,6 +6,7 @@ import {
   IsUUID,
   MinLength,
   MaxLength,
+  IsArray,
 } from 'class-validator';
 import { TaskPriorite, TaskStatut } from '../entities/task.entity.js';
 
@@ -38,6 +39,6 @@ export class UpdateTaskDto {
   statut?: TaskStatut;
 
   @IsOptional()
-  @IsUUID('4')
-  assigneAId?: string | null;
+  @IsArray()
+  assignesIds?: string[];
 }

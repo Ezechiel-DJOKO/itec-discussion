@@ -6,6 +6,7 @@ import {
   IsUUID,
   MinLength,
   MaxLength,
+  IsArray,
 } from 'class-validator';
 import { TaskPriorite } from '../entities/task.entity.js';
 
@@ -31,6 +32,6 @@ export class CreateTaskDto {
   priorite?: TaskPriorite;
 
   @IsOptional()
-  @IsUUID('4', { message: 'ID responsable invalide' })
-  assigneAId?: string;
+  @IsArray()
+  assignesIds?: string[];
 }

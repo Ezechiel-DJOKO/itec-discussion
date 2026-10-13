@@ -9,6 +9,7 @@ import {
 export enum AppPermission {
   CAN_CREATE_PROJECT = 'can_create_project',
   CAN_VIEW_STATS = 'can_view_stats',
+  CAN_ACCESS_QG = 'can_access_qg', // 👈 NOUVEAU
 }
 
 @Entity('users')

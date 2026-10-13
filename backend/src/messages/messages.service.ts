@@ -9,6 +9,7 @@ import { MessagesGateway } from './messages.gateway.js';
 // 🔴 NOUVEAUX IMPORTS EN HAUT :
 import { ChannelMessage, ChannelType } from './entities/channel-message.entity.js';
 import { User } from '../users/entities/user.entity.js';
+import { AppPermission } from '../users/entities/user.entity.js';
 
 @Injectable()
 export class MessagesService {
@@ -105,12 +106,16 @@ export class MessagesService {
   // ─── VÉRIFIER SI L'UTILISATEUR EST RESPONSABLE ────────────
   private async isResponsable(userId: string): Promise<boolean> {
     const user = await this.userRepo.findOne({ where: { id: userId } });
-    if (user?.isSuperAdmin) return true;
+    if (!user) return false;
 
-    const isChef = await this.memberRepo.count({
-      where: { userId, role: MemberRole.CHEF },
-    });
-    return isChef > 0;
+    if (user.isSuperAdmin) return true;
+
+    const perms = user.permissions || [];
+    if (perms.includes(AppPermission.CAN_ACCESS_QG)) {
+      return true;
+    }
+
+    return false;
   }
 
   // ─── CHANNELS GLOBAUX ET RESPONSABLES ─────────────────────
@@ -196,6 +201,84 @@ export class MessagesService {
 
     msg.message = ' Ce message a été supprimé';
     msg.isDeleted = true;
+    const saved = await this.channelMsgRepo.save(msg);
+    const full = await this.channelMsgRepo.findOne({ where: { id: saved.id } });
+    this.gateway.diffuserChannelMessageUpdate(msg.channel, full);
+    return full;
+  }
+
+    // ─── ÉPINGLER UN MESSAGE PROJET ───
+  async togglePinProjectMessage(id: string, userId: string) {
+    const msg = await this.msgRepo.findOne({ where: { id } });
+    if (!msg) throw new NotFoundException('Message introuvable');
+
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    const member = await this.memberRepo.findOne({ where: { projectId: msg.projectId, userId } });
+
+    if (!user?.isSuperAdmin && member?.role !== MemberRole.CHEF) {
+      throw new ForbiddenException('Seuls les responsables peuvent épingler un message');
+    }
+
+    msg.isPinned = !msg.isPinned;
+    const saved = await this.msgRepo.save(msg);
+    const full = await this.msgRepo.findOne({ where: { id: saved.id } });
+    this.gateway.diffuserProjectMessageUpdate(msg.projectId, full);
+    return full;
+  }
+
+  // ─── ÉPINGLER UN MESSAGE CHANNEL ───
+  async togglePinChannelMessage(id: string, userId: string) {
+    const msg = await this.channelMsgRepo.findOne({ where: { id } });
+    if (!msg) throw new NotFoundException('Message introuvable');
+
+    const isResp = await this.isResponsable(userId);
+    if (!isResp) throw new ForbiddenException('Seuls les responsables peuvent épingler un message');
+
+    msg.isPinned = !msg.isPinned;
+    const saved = await this.channelMsgRepo.save(msg);
+    const full = await this.channelMsgRepo.findOne({ where: { id: saved.id } });
+    this.gateway.diffuserChannelMessageUpdate(msg.channel, full);
+    return full;
+  }
+
+    // ─── RÉAGIR À UN MESSAGE PROJET ───
+  async reactToProjectMessage(id: string, userId: string, emoji: string) {
+    const msg = await this.msgRepo.findOne({ where: { id } });
+    if (!msg) throw new NotFoundException('Message introuvable');
+
+    if (!msg.reactions) msg.reactions = {};
+    if (!msg.reactions[emoji]) msg.reactions[emoji] = [];
+
+    const userIndex = msg.reactions[emoji].indexOf(userId);
+    if (userIndex > -1) {
+      msg.reactions[emoji].splice(userIndex, 1); // Retire la réaction si elle existe déjà
+      if (msg.reactions[emoji].length === 0) delete msg.reactions[emoji];
+    } else {
+      msg.reactions[emoji].push(userId); // Ajoute la réaction
+    }
+
+    const saved = await this.msgRepo.save(msg);
+    const full = await this.msgRepo.findOne({ where: { id: saved.id } });
+    this.gateway.diffuserProjectMessageUpdate(msg.projectId, full);
+    return full;
+  }
+
+  // ─── RÉAGIR À UN MESSAGE CHANNEL ───
+  async reactToChannelMessage(id: string, userId: string, emoji: string) {
+    const msg = await this.channelMsgRepo.findOne({ where: { id } });
+    if (!msg) throw new NotFoundException('Message introuvable');
+
+    if (!msg.reactions) msg.reactions = {};
+    if (!msg.reactions[emoji]) msg.reactions[emoji] = [];
+
+    const userIndex = msg.reactions[emoji].indexOf(userId);
+    if (userIndex > -1) {
+      msg.reactions[emoji].splice(userIndex, 1);
+      if (msg.reactions[emoji].length === 0) delete msg.reactions[emoji];
+    } else {
+      msg.reactions[emoji].push(userId);
+    }
+
     const saved = await this.channelMsgRepo.save(msg);
     const full = await this.channelMsgRepo.findOne({ where: { id: saved.id } });
     this.gateway.diffuserChannelMessageUpdate(msg.channel, full);

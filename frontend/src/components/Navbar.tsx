@@ -154,12 +154,11 @@ export default function Navbar() {
 
               <div className="space-y-1">
                 <Link
-                  href="/dashboard"
+                  href="/dashboard/profile" // 👈 ASSURE-TOI QUE C'EST BIEN CE LIEN
                   onClick={() => setOpenProfile(false)}
                   className="flex items-center gap-2 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 p-2 rounded-lg transition"
                 >
-                  <CheckCircle2 size={16} className="text-itec-sky" />
-                  Mon Tableau de bord
+                  <User size={16} className="text-itec-sky" /> Mon Profil
                 </Link>
                 <button
                   onClick={logout}

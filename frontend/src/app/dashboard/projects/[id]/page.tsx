@@ -11,18 +11,13 @@ import { Project, User, Task, TaskStatut, TaskPriorite, TaskFile } from '@/types
 import ProjectChat from '@/components/ProjectChat';
 import TaskComments from '@/components/TaskComments';
 import TaskReadmeModal from '@/components/TaskReadmeModal';
-// Nouvelles icônes
+import EditProjectModal from '@/components/EditProjectModal';
+import EditTaskModal from '@/components/EditTaskModal';
 import { 
   ArrowLeft, Archive, LogOut, Calendar, User as UserIcon, CheckCircle, 
   Clock, ShieldAlert, Plus, Trash2, BookOpen, Upload, Download, 
-  Activity, Users, FileText,
-  AlertTriangle,
-  Settings,
-  Edit3,
-  RotateCcw
+  Activity, Users, FileText, AlertTriangle, Settings, Edit3, RotateCcw
 } from 'lucide-react';
-import EditProjectModal from '@/components/EditProjectModal';
-import EditTaskModal from '@/components/EditTaskModal';
 
 // ─── Helpers UI ──────────────────────────────────────────
 const statutConfig: Record<TaskStatut, { label: string; color: string }> = {
@@ -169,11 +164,16 @@ function ProjectDetailContent() {
   const [showEditProject, setShowEditProject] = useState(false);
   const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
   
-  const [taskForm, setTaskForm] = useState({ titre: '', description: '', dateLimite: '', priorite: 'moyenne' as TaskPriorite, assigneAId: '' });
+  const [taskForm, setTaskForm] = useState({
+    titre: '',
+    description: '',
+    dateLimite: '',
+    priorite: 'moyenne' as TaskPriorite,
+    assignesIds: [] as string[], // Tableau pour assignation multiple
+  });
   const [taskErreur, setTaskErreur] = useState('');
   const [taskLoading, setTaskLoading] = useState(false);
   const [filtreStatut, setFiltreStatut] = useState<string>('tous');
-  
 
   const isChef = project?.membres?.some((m) => m.userId === user?.id && m.role === 'chef') ?? false;
 
@@ -185,7 +185,7 @@ function ProjectDetailContent() {
         api.get(`/projects/${projectId}/logs`),
       ]);
       setProject(projRes.data); setTasks(tasksRes.data); setLogs(logsRes.data);
-    } catch (err: any) { setErreur(err.response?.data?.message || 'Erreur'); } finally { setLoading(false); }
+    } catch (err: any) { setErreur(err.response?.data?.message || 'Erreur de chargement'); } finally { setLoading(false); }
   };
 
   useEffect(() => { if (projectId) fetchAll(); }, [projectId]);
@@ -218,37 +218,26 @@ function ProjectDetailContent() {
     }
   };
 
-    const handleArchive = async () => {
+  const handleArchive = async () => {
     if (!confirm('Archiver ce projet ? Il ne sera plus visible dans la liste active, mais restera en base.')) return;
     try {
       await api.patch(`/projects/${projectId}/archive`);
       router.push('/dashboard');
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Erreur');
-    }
+    } catch (err: any) { alert(err.response?.data?.message || 'Erreur'); }
   };
 
-    const handleUnarchive = async () => {
+  const handleUnarchive = async () => {
     try {
       await api.patch(`/projects/${projectId}/unarchive`);
       setProject({ ...project!, statut: 'en_cours' });
       alert('Projet désarchivé et réactivé avec succès !');
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Erreur');
-    }
+    } catch (err: any) { alert(err.response?.data?.message || 'Erreur'); }
   };
 
   const handleDeleteProject = async () => {
-    const confirmation = prompt(
-      `🚨 SUPPRESSION DÉFINITIVE\n\nToutes les tâches, fichiers et messages seront effacés.\n\nPour confirmer, tapez : SUPPRIMER`
-    );
+    const confirmation = prompt(`🚨 SUPPRESSION DÉFINITIVE\nToutes les tâches, fichiers et messages seront effacés.\nPour confirmer, tapez : SUPPRIMER`);
     if (confirmation === 'SUPPRIMER') {
-      try {
-        await api.delete(`/projects/${projectId}`);
-        router.push('/dashboard');
-      } catch (err: any) {
-        alert(err.response?.data?.message || 'Erreur');
-      }
+      try { await api.delete(`/projects/${projectId}`); router.push('/dashboard'); } catch {}
     }
   };
 
@@ -258,14 +247,27 @@ function ProjectDetailContent() {
   };
 
   const handleCreateTask = async (e: React.FormEvent) => {
-    e.preventDefault(); setTaskErreur(''); setTaskLoading(true);
+    e.preventDefault();
+    setTaskErreur('');
+    setTaskLoading(true);
     try {
-      const payload: any = { titre: taskForm.titre, description: taskForm.description || undefined, dateLimite: taskForm.dateLimite, priorite: taskForm.priorite };
-      if (taskForm.assigneAId) payload.assigneAId = taskForm.assigneAId;
+      const payload: any = {
+        titre: taskForm.titre,
+        description: taskForm.description || undefined,
+        dateLimite: taskForm.dateLimite,
+        priorite: taskForm.priorite,
+        assignesIds: taskForm.assignesIds
+      };
+
       const res = await api.post(`/projects/${projectId}/tasks`, payload);
-      setTasks((prev) => [res.data, ...prev]); setShowNewTask(false);
-      setTaskForm({ titre: '', description: '', dateLimite: '', priorite: 'moyenne', assigneAId: '' });
-    } catch (err: any) { setTaskErreur(err.response?.data?.message || 'Erreur'); } finally { setTaskLoading(false); }
+      setTasks((prev) => [res.data, ...prev]);
+      setShowNewTask(false);
+      setTaskForm({ titre: '', description: '', dateLimite: '', priorite: 'moyenne', assignesIds: [] });
+    } catch (err: any) {
+      setTaskErreur(err.response?.data?.message || 'Erreur lors de la création');
+    } finally {
+      setTaskLoading(false);
+    }
   };
 
   const handleChangeStatut = async (taskId: string, statut: TaskStatut) => {
@@ -290,8 +292,9 @@ function ProjectDetailContent() {
     } catch {}
   };
 
-  const canChangeStatut = (task: Task) => isChef || task.assigneAId === user?.id;
-  const canUpload = (task: Task) => isChef || task.assigneAId === user?.id;
+  // Autorisation: Le chef ou l'un des membres assignés
+  const canChangeStatut = (task: Task) => isChef || task.assignes?.some(a => a.id === user?.id);
+  const canUpload = (task: Task) => isChef || task.assignes?.some(a => a.id === user?.id);
   const tasksFiltrees = filtreStatut === 'tous' ? tasks : tasks.filter((t) => t.statut === filtreStatut);
 
   const stats = {
@@ -332,18 +335,22 @@ function ProjectDetailContent() {
               <h1 className="text-3xl font-black text-white">{project.nom}</h1>
               <p className="text-white/70 mt-2 max-w-2xl">{project.description || 'Pas de description'}</p>
               <div className="flex flex-wrap gap-4 mt-4 text-sm font-medium text-white/50">
-                <span className="flex items-center gap-1.5"><Calendar size={16}/> {new Date(project.dateDebut).toLocaleDateString()} → {new Date(project.dateFin).toLocaleDateString()}</span>
-                <span className="flex items-center gap-1.5"><UserIcon size={16}/> {project.createur?.nom}</span>
+                <span className="flex items-center gap-1.5">
+                  <Calendar size={16}/> {new Date(project.dateDebut).toLocaleDateString()} → {new Date(project.dateFin).toLocaleDateString()}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <UserIcon size={16}/> {project.createur?.nom}
+                </span>
               </div>
             </div>
-                                     <div className="flex flex-wrap gap-2">
+            
+            <div className="flex flex-wrap gap-2">
               {isChef ? (
                 <>
                   <button onClick={() => setShowEditProject(true)} className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-xl transition font-bold text-sm">
                     <Settings size={16}/> Paramètres
                   </button>
 
-                  {/* 🔴 CONDITION : SI ARCHIVÉ -> DÉSARCHIVER, SINON -> ARCHIVER */}
                   {project.statut === 'archive' ? (
                     <button onClick={handleUnarchive} className="flex items-center gap-2 bg-green-500/20 hover:bg-green-500/30 text-green-400 border border-green-500/30 px-4 py-2 rounded-xl transition font-bold text-sm">
                       <RotateCcw size={16}/> Désarchiver
@@ -427,12 +434,33 @@ function ProjectDetailContent() {
                       <option value="basse">Basse ⚪</option>
                     </select>
                   </div>
-                  <div>
-                    <label className="text-xs font-bold text-white/50 mb-1 block uppercase">Assigné à</label>
-                    <select value={taskForm.assigneAId} onChange={(e) => setTaskForm({ ...taskForm, assigneAId: e.target.value })} className="glass-input w-full px-4 py-3 rounded-xl text-sm [&>option]:bg-[#0A2540]">
-                      <option value="">— Personne —</option>
-                      {project.membres?.map((m) => <option key={m.userId} value={m.userId}>{m.user?.nom}</option>)}
-                    </select>
+                  <div className="col-span-1 sm:col-span-3 mt-2">
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="text-xs font-bold text-white/50 uppercase">Assigné à</label>
+                      <button 
+                        type="button" 
+                        onClick={() => setTaskForm({ ...taskForm, assignesIds: project?.membres.map(m => m.userId) || [] })}
+                        className="text-[10px] bg-itec-sky/20 text-itec-sky px-2 py-1 rounded hover:bg-itec-sky/30 transition font-bold"
+                      >
+                        TOUT LE MONDE
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto p-3 bg-black/20 rounded-xl border border-white/5">
+                      {project.membres?.map((m) => (
+                        <label key={m.userId} className="flex items-center gap-2 text-sm text-white/80 cursor-pointer hover:bg-white/5 px-2 py-1.5 rounded transition">
+                          <input 
+                            type="checkbox" 
+                            checked={taskForm.assignesIds.includes(m.userId)}
+                            onChange={(e) => {
+                              if (e.target.checked) setTaskForm({...taskForm, assignesIds: [...taskForm.assignesIds, m.userId]});
+                              else setTaskForm({...taskForm, assignesIds: taskForm.assignesIds.filter(id => id !== m.userId)});
+                            }}
+                            className="rounded border-white/20 bg-transparent text-itec-sky focus:ring-itec-sky/50"
+                          />
+                          {m.user?.nom}
+                        </label>
+                      ))}
+                    </div>
                   </div>
                 </div>
                 <button type="submit" disabled={taskLoading} className="w-full bg-gradient-to-r from-itec-sky to-blue-500 hover:from-blue-400 hover:to-blue-600 text-white font-bold py-3.5 rounded-xl transition shadow-lg disabled:opacity-50">
@@ -465,7 +493,14 @@ function ProjectDetailContent() {
 
                           <div className="bg-black/30 rounded-xl p-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-medium text-white/70 border border-white/5">
                             <span className={`flex items-center gap-1.5 ${retard ? 'text-red-400' : ''}`}><Clock size={14}/> {new Date(task.dateLimite).toLocaleDateString()}</span>
-                            <span className="flex items-center gap-1.5"><UserIcon size={14}/> {task.assigneA?.nom || 'Non assigné'}</span>
+                            
+                            {/* 🔴 CORRECTION D'AFFICHAGE MULTIPLE ICI */}
+                            <span className="flex items-center gap-1.5 flex-wrap">
+                              <UserIcon size={14}/> 
+                              {task.assignes && task.assignes.length > 0 
+                                ? task.assignes.map((a: any) => a.nom).join(', ') 
+                                : 'Non assigné'}
+                            </span>
                             
                             {task.joursSurplus > 0 && (
                               <span className="text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded-md flex items-center gap-1">
@@ -479,7 +514,6 @@ function ProjectDetailContent() {
                               <BookOpen size={14}/> Instructions / README {task.readme ? '✓' : ''}
                             </button>
 
-                            {/* 🔴 NOUVEAU BOUTON MODIFIER TACHE */}
                             {isChef && (
                               <button onClick={() => setTaskToEdit(task)} className="text-xs font-bold bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg transition flex items-center gap-1.5">
                                 <Edit3 size={14}/> Modifier
@@ -493,7 +527,6 @@ function ProjectDetailContent() {
                             )}
                           </div>
 
-                          {/* COMPOSANTS ENFANTS */}
                           <TaskFilesSection task={task} userId={user?.id || ''} isChef={isChef} canUpload={canUpload(task)} />
                           <TaskComments taskId={task.id} currentUser={user} />
                         </div>
@@ -623,7 +656,7 @@ function ProjectDetailContent() {
         />
       )}
 
-            {/* 🔴 MODALES D'EDITION */}
+      {/* MODALES D'EDITION */}
       {showEditProject && project && (
         <EditProjectModal project={project} onClose={() => setShowEditProject(false)} onUpdated={(p) => setProject({ ...project, ...p })} />
       )}
@@ -633,7 +666,7 @@ function ProjectDetailContent() {
       )}
 
       {/* CHAT FLOTTANT */}
-      <ProjectChat projectId={projectId} currentUser={user} />
+      <ProjectChat projectId={projectId} currentUser={user} isChef={isChef} membres={project?.membres || []}/>
     </div>
   );
 }

@@ -34,7 +34,13 @@ export class ChannelMessage {
   replyToId: string | null;
 
   @Column({ type: 'json', nullable: true })
-  replyTo: any | null; // Stockera { id, nom, preview }
+  replyTo: any | null; 
+
+    @Column({ default: false })
+  isPinned: boolean;
+
+  @Column({ type: 'json', default: {} })
+  reactions: Record<string, string[]>;
 
   @CreateDateColumn()
   creeLe: Date;

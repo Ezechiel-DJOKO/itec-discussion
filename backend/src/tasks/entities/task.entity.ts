@@ -6,6 +6,8 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  ManyToMany,
+  JoinTable,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity.js';
 import type { Project } from '../../projects/entities/project.entity.js';
@@ -70,12 +72,13 @@ export class Task {
   projectId: string;
 
   // Responsable assigné
-  @ManyToOne(() => User, { eager: true, nullable: true })
-  @JoinColumn({ name: 'assigne_a' })
-  assigneA: User | null;
-
-  @Column({ name: 'assigne_a', nullable: true })
-  assigneAId: string | null;
+  @ManyToMany(() => User, { eager: true })
+  @JoinTable({
+    name: 'task_assignees',
+    joinColumn: { name: 'task_id', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'user_id', referencedColumnName: 'id' },
+  })
+  assignes: User[];
 
   // Qui a créé la tâche
   @ManyToOne(() => User, { eager: true })

@@ -41,6 +41,7 @@ export interface Task {
   dateLimiteInitiale: string;
   joursSurplus: number;
   projectId: string;
+  assignes: User[];
   assigneA: User | null;
   assigneAId: string | null;
   createur: User;

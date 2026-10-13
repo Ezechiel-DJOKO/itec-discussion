@@ -11,6 +11,8 @@ import * as bcrypt from 'bcrypt';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { Task, TaskStatut } from '../tasks/entities/task.entity.js';
 import { Penalty } from './entities/penalty.entity.js';
+import { UnauthorizedException } from '@nestjs/common';
+import { UpdatePasswordDto } from './dto/update-password.dto.js';
 
 @Injectable()
 export class UsersService {
@@ -147,35 +149,64 @@ export class UsersService {
     return saved; // 👈 On retourne directement l'objet enregistré !
   }
 
-  // ─── CALCUL DU RENDEMENT ────────────────────────────────
+    // ─── CALCUL DU RENDEMENT ────────────────────────────────
   async getUserStats(userId: string) {
-    // 1. Récupérer toutes les pénalités
     const penalties = await this.penaltyRepo.find({ where: { userId }, order: { creeLe: 'DESC' } });
     
-    // 2. Récupérer toutes les tâches assignées
-    const tasks = await this.taskRepo.find({ where: { assigneAId: userId } });
+    // 🔴 ATTENTION: Avec l'assignation multiple qui arrive, on doit chercher dans la relation "assignes"
+    // (On va modifier la relation Task juste après, on prépare le terrain)
+        // 🟢 NOUVEAU CODE : TypeORM moderne utilise un objet pour les relations
+    const tasks = await this.taskRepo.find({ 
+      where: { assignes: { id: userId } }, 
+      relations: { assignes: true } 
+    });
     
     const totalTasks = tasks.length;
     const completedTasks = tasks.filter(t => t.statut === TaskStatut.TERMINE).length;
     
-    // Tâches en retard (non terminées et date dépassée)
     const today = new Date().toISOString().split('T')[0];
     const lateTasks = tasks.filter(t => t.statut !== TaskStatut.TERMINE && t.dateLimite < today).length;
 
-    // 3. Calcul du Rendement (%)
-    // Base 100%. On enlève 5% par pénalité et 5% par tâche en retard actuelle.
-    let rendement = 100;
-    rendement -= (penalties.length * 5);
-    rendement -= (lateTasks * 5);
+    // 🔴 NOUVEAU CALCUL (Démarre à 0% si rien n'est fait)
+    let baseRendement = 0;
+    if (totalTasks > 0) {
+      baseRendement = (completedTasks / totalTasks) * 100;
+    }
+
+    // Malus
+    let finalRendement = baseRendement - (penalties.length * 5) - (lateTasks * 5);
     
-    if (rendement < 0) rendement = 0; // Ne descend pas sous 0%
+    // Garder entre 0% et 100%
+    if (finalRendement < 0) finalRendement = 0;
+    if (finalRendement > 100) finalRendement = 100;
 
     return {
-      rendement,
+      rendement: Math.round(finalRendement),
       totalTasks,
       completedTasks,
       lateTasks,
       penalties,
     };
+  }
+
+  // 🔴 NOUVEL IMPORT EN HAUT (s'il n'y est pas déjà) :
+
+
+// 🔴 AJOUTE CETTE MÉTHODE DANS LA CLASSE :
+  // ─── CHANGER LE MOT DE PASSE ───
+  async updatePassword(userId: string, dto: UpdatePasswordDto): Promise<{ message: string }> {
+    const user = await this.findById(userId);
+
+    // Vérifier l'ancien mot de passe
+    const isValid = await bcrypt.compare(dto.ancienMotDePasse, user.motDePasse);
+    if (!isValid) {
+      throw new UnauthorizedException('Ancien mot de passe incorrect');
+    }
+
+    // Hasher le nouveau mot de passe
+    user.motDePasse = await bcrypt.hash(dto.nouveauMotDePasse, 10);
+    await this.userRepo.save(user);
+
+    return { message: 'Mot de passe mis à jour avec succès' };
   }
 }

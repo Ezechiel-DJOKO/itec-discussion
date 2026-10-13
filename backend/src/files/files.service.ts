@@ -9,14 +9,12 @@ import { Repository } from 'typeorm';
 import { TaskFile } from './entities/task-file.entity.js';
 import { Task } from '../tasks/entities/task.entity.js';
 import { ProjectMember, MemberRole } from '../projects/entities/project-member.entity.js';
-import * as fs from 'fs';
-import * as path from 'path';
 import { ActivityLogsService } from '../activity-logs/activity-logs.service.js';
 import { ActionType } from '../activity-logs/entities/activity-log.entity.js';
+import * as fs from 'fs';
+import * as path from 'path';
 
 const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
-
-// Créer le dossier s'il n'existe pas
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
@@ -24,12 +22,9 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 @Injectable()
 export class FilesService {
   constructor(
-    @InjectRepository(TaskFile)
-    private readonly fileRepo: Repository<TaskFile>,
-    @InjectRepository(Task)
-    private readonly taskRepo: Repository<Task>,
-    @InjectRepository(ProjectMember)
-    private readonly memberRepo: Repository<ProjectMember>,
+    @InjectRepository(TaskFile) private readonly fileRepo: Repository<TaskFile>,
+    @InjectRepository(Task) private readonly taskRepo: Repository<Task>,
+    @InjectRepository(ProjectMember) private readonly memberRepo: Repository<ProjectMember>,
     private readonly activityLogsService: ActivityLogsService,
   ) {}
 
@@ -40,36 +35,23 @@ export class FilesService {
     const member = await this.memberRepo.findOne({
       where: { projectId: task.projectId, userId },
     });
-    if (!member) {
-      throw new ForbiddenException("Vous n'êtes pas membre de ce projet");
-    }
+    if (!member) throw new ForbiddenException("Vous n'êtes pas membre de ce projet");
 
     return { task, member };
   }
 
-  // ─── UPLOAD ────────────────────────────────────────────
-  async upload(
-    taskId: string,
-    file: Express.Multer.File,
-    userId: string,
-  ): Promise<TaskFile> {
-    if (!file) {
-      throw new BadRequestException('Aucun fichier fourni');
-    }
+  async upload(taskId: string, file: Express.Multer.File, userId: string): Promise<TaskFile> {
+    if (!file) throw new BadRequestException('Aucun fichier fourni');
 
     const { task, member } = await this.getTaskAndCheckAccess(taskId, userId);
 
     const isChef = member.role === MemberRole.CHEF;
-    const isAssignee = task.assigneAId === userId;
+    // 🔴 CORRECTION ICI : on vérifie dans le tableau assignes
+    const isAssignee = task.assignes?.some(a => a.id === userId);
 
     if (!isChef && !isAssignee) {
-      // Supprimer le fichier déjà écrit sur disque
-      if (file.path && fs.existsSync(file.path)) {
-        fs.unlinkSync(file.path);
-      }
-      throw new ForbiddenException(
-        'Seul le responsable de la tâche ou le chef peut uploader un fichier',
-      );
+      if (file.path && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+      throw new ForbiddenException('Seul un responsable de la tâche ou le chef peut uploader un fichier');
     }
 
     const taskFile = this.fileRepo.create({
@@ -82,20 +64,18 @@ export class FilesService {
       uploadedById: userId,
     });
 
-    // 🔴 AJOUT DU TRACKING ICI
+    const savedFile = await this.fileRepo.save(taskFile);
+
     await this.activityLogsService.logAction(task.projectId, userId, ActionType.FICHIER_UPLOADE, {
       taskTitre: task.titre,
       nomFichier: file.originalname,
     });
 
-
-    return this.fileRepo.save(taskFile);
+    return savedFile;
   }
 
-  // ─── LISTER LES FICHIERS D'UNE TÂCHE ───────────────────
   async findByTask(taskId: string, userId: string): Promise<TaskFile[]> {
     await this.getTaskAndCheckAccess(taskId, userId);
-
     return this.fileRepo.find({
       where: { taskId },
       relations: { uploadedBy: true },
@@ -103,11 +83,7 @@ export class FilesService {
     });
   }
 
-  // ─── TÉLÉCHARGER ───────────────────────────────────────
-  async getFileForDownload(
-    fileId: string,
-    userId: string,
-  ): Promise<{ file: TaskFile; absolutePath: string }> {
+  async getFileForDownload(fileId: string, userId: string): Promise<{ file: TaskFile; absolutePath: string }> {
     const file = await this.fileRepo.findOne({
       where: { id: fileId },
       relations: { uploadedBy: true },
@@ -117,14 +93,11 @@ export class FilesService {
     await this.getTaskAndCheckAccess(file.taskId, userId);
 
     const absolutePath = path.join(UPLOADS_DIR, file.nomStockage);
-    if (!fs.existsSync(absolutePath)) {
-      throw new NotFoundException('Fichier manquant sur le serveur');
-    }
+    if (!fs.existsSync(absolutePath)) throw new NotFoundException('Fichier manquant sur le serveur');
 
     return { file, absolutePath };
   }
 
-  // ─── SUPPRIMER ─────────────────────────────────────────
   async remove(fileId: string, userId: string): Promise<{ message: string }> {
     const file = await this.fileRepo.findOne({ where: { id: fileId } });
     if (!file) throw new NotFoundException('Fichier introuvable');
@@ -135,16 +108,11 @@ export class FilesService {
     const isOwner = file.uploadedById === userId;
 
     if (!isChef && !isOwner) {
-      throw new ForbiddenException(
-        "Vous ne pouvez supprimer que vos propres fichiers (ou être chef)",
-      );
+      throw new ForbiddenException("Vous ne pouvez supprimer que vos propres fichiers (ou être chef)");
     }
 
-    // Supprimer du disque
     const absolutePath = path.join(UPLOADS_DIR, file.nomStockage);
-    if (fs.existsSync(absolutePath)) {
-      fs.unlinkSync(absolutePath);
-    }
+    if (fs.existsSync(absolutePath)) fs.unlinkSync(absolutePath);
 
     await this.fileRepo.remove(file);
     return { message: 'Fichier supprimé' };

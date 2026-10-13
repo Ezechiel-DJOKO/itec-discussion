@@ -79,4 +79,24 @@ export class MessagesController {
     }
     return this.msgService.addChannelMessage(body.targetId as any, req.user.sub, text);
   }
+
+    @Patch('projects/messages/:id/pin')
+  togglePinProjectMsg(@Param('id') id: string, @Request() req: ReqUser) {
+    return this.msgService.togglePinProjectMessage(id, req.user.sub);
+  }
+
+  @Patch('channels/messages/:id/pin')
+  togglePinChannelMsg(@Param('id') id: string, @Request() req: ReqUser) {
+    return this.msgService.togglePinChannelMessage(id, req.user.sub);
+  }
+
+    @Post('projects/messages/:id/react')
+  reactProjectMsg(@Param('id') id: string, @Body('emoji') emoji: string, @Request() req: ReqUser) {
+    return this.msgService.reactToProjectMessage(id, req.user.sub, emoji);
+  }
+
+  @Post('channels/messages/:id/react')
+  reactChannelMsg(@Param('id') id: string, @Body('emoji') emoji: string, @Request() req: ReqUser) {
+    return this.msgService.reactToChannelMessage(id, req.user.sub, emoji);
+  }
 }
