@@ -24,7 +24,7 @@ import { MessagesModule } from './messages/messages.module.js';
         password: config.get('DB_PASSWORD'),
         database: config.get('DB_DATABASE'),
         autoLoadEntities: true,
-        synchronize: true,
+        synchronize: false,
         // 🔴 OBLIGATOIRE POUR SUPABASE EN PRODUCTION :
         ssl: config.get('NODE_ENV') === 'production' ? { rejectUnauthorized: false } : false,
       }),

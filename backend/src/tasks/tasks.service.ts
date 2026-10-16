@@ -41,14 +41,33 @@ export class TasksService {
     }
   }
 
+  /** Notifie une liste d'users (sauf l'auteur) */
+  private async notifyUsers(
+    userIds: string[],
+    message: string,
+    exceptUserId?: string,
+  ) {
+    const unique = [...new Set(userIds.filter((id) => id && id !== exceptUserId))];
+    for (const uid of unique) {
+      try {
+        await this.notifService.create(uid, message);
+      } catch (e) {
+        // on n'bloque pas la tâche si une notif échoue
+        console.error('Notif error', uid, e);
+      }
+    }
+  }
+
   async create(projectId: string, dto: CreateTaskDto, userId: string): Promise<Task> {
     await this.assertIsChef(projectId, userId);
 
     let assignes: User[] = [];
     if (dto.assignesIds && dto.assignesIds.length > 0) {
-      // 🔴 CORRECTION : fetch des utilisateurs
       assignes = await this.userRepo.findBy({ id: In(dto.assignesIds) });
     }
+
+    const creator = await this.userRepo.findOne({ where: { id: userId } });
+    const creatorName = creator?.nom || 'Un chef de projet';
 
     const task = this.taskRepo.create({
       titre: dto.titre,
@@ -58,11 +77,21 @@ export class TasksService {
       dateLimiteInitiale: dto.dateLimite,
       priorite: dto.priorite,
       projectId,
-      assignes, // 🔴 NOUVEAU FORMAT
+      assignes,
       createdById: userId,
     });
 
     const saved = await this.taskRepo.save(task);
+
+    // 🔔 Notif : tâche assignée
+    if (assignes.length > 0) {
+      await this.notifyUsers(
+        assignes.map((a) => a.id),
+        `📋 ${creatorName} vous a assigné la tâche « ${saved.titre} »`,
+        userId,
+      );
+    }
+
     return this.findOne(saved.id, userId);
   }
 
@@ -70,7 +99,7 @@ export class TasksService {
     await this.getMembership(projectId, userId);
     return this.taskRepo.find({
       where: { projectId },
-      relations: { assignes: true, createur: true }, // 🔴 CORRECTION
+      relations: { assignes: true, project: true, createur: true },
       order: { creeLe: 'DESC' },
     });
   }
@@ -78,7 +107,7 @@ export class TasksService {
   async findOne(taskId: string, userId: string): Promise<Task> {
     const task = await this.taskRepo.findOne({
       where: { id: taskId },
-      relations: { assignes: true, createur: true }, // 🔴 CORRECTION
+      relations: { assignes: true, project: true, createur: true },
     });
 
     if (!task) throw new NotFoundException('Tâche introuvable');
@@ -89,6 +118,11 @@ export class TasksService {
   async update(taskId: string, dto: UpdateTaskDto, userId: string): Promise<Task> {
     const task = await this.findOne(taskId, userId);
     await this.assertIsChef(task.projectId, userId);
+
+    const actor = await this.userRepo.findOne({ where: { id: userId } });
+    const actorName = actor?.nom || 'Un chef de projet';
+
+    const oldAssigneeIds = (task.assignes || []).map((a) => a.id);
 
     if (dto.assignesIds) {
       task.assignes = await this.userRepo.findBy({ id: In(dto.assignesIds) });
@@ -102,7 +136,30 @@ export class TasksService {
     if (dto.statut) task.statut = dto.statut;
 
     await this.taskRepo.save(task);
-    return this.findOne(taskId, userId);
+
+    const refreshed = await this.findOne(taskId, userId);
+    const newAssigneeIds = (refreshed.assignes || []).map((a) => a.id);
+
+    // Nouveaux assignés uniquement
+    if (dto.assignesIds) {
+      const newlyAssigned = newAssigneeIds.filter((id) => !oldAssigneeIds.includes(id));
+      await this.notifyUsers(
+        newlyAssigned,
+        `📋 ${actorName} vous a assigné la tâche « ${refreshed.titre} »`,
+        userId,
+      );
+    }
+
+    // Changement de statut via update général
+    if (dto.statut) {
+      await this.notifyUsers(
+        newAssigneeIds,
+        `🔄 ${actorName} a passé la tâche « ${refreshed.titre} » → ${dto.statut}`,
+        userId,
+      );
+    }
+
+    return refreshed;
   }
 
   async updateStatut(taskId: string, statut: TaskStatut, userId: string): Promise<Task> {
@@ -110,11 +167,17 @@ export class TasksService {
     const membership = await this.getMembership(task.projectId, userId);
 
     const isChef = membership.role === MemberRole.CHEF;
-    const isAssignee = task.assignes?.some(a => a.id === userId); // 🔴 CORRECTION
+    const isAssignee = task.assignes?.some((a) => a.id === userId);
 
     if (!isChef && !isAssignee) {
-      throw new ForbiddenException("Seul un responsable de la tâche ou le chef peut changer le statut");
+      throw new ForbiddenException(
+        'Seul un responsable de la tâche ou le chef peut changer le statut',
+      );
     }
+
+    const actor = await this.userRepo.findOne({ where: { id: userId } });
+    const actorName = actor?.nom || 'Quelqu\'un';
+    const oldStatut = task.statut;
 
     task.statut = statut;
     await this.taskRepo.save(task);
@@ -123,6 +186,20 @@ export class TasksService {
       taskTitre: task.titre,
       nouveauStatut: statut,
     });
+
+    // 🔔 Notifier les autres assignés + le chef
+    const assigneeIds = (task.assignes || []).map((a) => a.id);
+    const chef = await this.memberRepo.findOne({
+      where: { projectId: task.projectId, role: MemberRole.CHEF },
+    });
+    const recipients = [...assigneeIds];
+    if (chef?.userId) recipients.push(chef.userId);
+
+    await this.notifyUsers(
+      recipients,
+      `🔄 ${actorName} a changé le statut de « ${task.titre} » : ${oldStatut} → ${statut}`,
+      userId,
+    );
 
     return this.findOne(taskId, userId);
   }
@@ -135,10 +212,10 @@ export class TasksService {
 
     const newDate = new Date(task.dateLimite);
     newDate.setDate(newDate.getDate() + jours);
-    
+
     task.dateLimite = newDate.toISOString().split('T')[0];
     task.joursSurplus += jours;
-    
+
     await this.taskRepo.save(task);
 
     await this.activityLogsService.logAction(task.projectId, chefId, ActionType.SURPLUS_ACCORDE, {
@@ -147,12 +224,11 @@ export class TasksService {
       nouvelleLimite: task.dateLimite,
     });
 
-    // 🔴 CORRECTION : Notifier TOUS les assignés
     if (task.assignes && task.assignes.length > 0) {
       for (const assignee of task.assignes) {
         await this.notifService.create(
           assignee.id,
-          `⏳ Délai prolongé ! +${jours} jour(s) accordé(s) pour la tâche "${task.titre}". Nouvelle limite : ${task.dateLimite}`
+          `⏳ Délai prolongé ! +${jours} jour(s) pour « ${task.titre} ». Nouvelle limite : ${task.dateLimite}`,
         );
       }
     }
@@ -163,13 +239,24 @@ export class TasksService {
   async remove(taskId: string, userId: string): Promise<{ message: string }> {
     const task = await this.findOne(taskId, userId);
     await this.assertIsChef(task.projectId, userId);
+
+    const titre = task.titre;
+    const assigneeIds = (task.assignes || []).map((a) => a.id);
+
     await this.taskRepo.remove(task);
+
+    await this.notifyUsers(
+      assigneeIds,
+      `🗑️ La tâche « ${titre} » a été supprimée`,
+      userId,
+    );
+
     return { message: 'Tâche supprimée avec succès' };
   }
 
   async findMyTasks(userId: string): Promise<Task[]> {
     return this.taskRepo.find({
-      where: { assignes: { id: userId } }, // 🔴 CORRECTION : Recherche dans la relation
+      where: { assignes: { id: userId } },
       relations: { assignes: true, createur: true },
       order: { dateLimite: 'ASC' },
     });
@@ -180,18 +267,17 @@ export class TasksService {
     const today = new Date().toISOString().split('T')[0];
     const overdueTasks = await this.taskRepo
       .createQueryBuilder('task')
-      .leftJoinAndSelect('task.assignes', 'assignes') // 🔴 CORRECTION
+      .leftJoinAndSelect('task.assignes', 'assignes')
       .where('task.dateLimite < :today', { today })
       .andWhere('task.statut != :termine', { termine: TaskStatut.TERMINE })
       .getMany();
 
     for (const task of overdueTasks) {
-      // Notifier les assignés
       if (task.assignes && task.assignes.length > 0) {
         for (const assignee of task.assignes) {
           await this.notifService.create(
             assignee.id,
-            `🚨 RETARD : Votre tâche "${task.titre}" a dépassé son délai (${task.dateLimite}).`
+            `🚨 RETARD : Votre tâche « ${task.titre} » a dépassé son délai (${task.dateLimite}).`,
           );
         }
       }
@@ -202,7 +288,7 @@ export class TasksService {
       if (chef) {
         await this.notifService.create(
           chef.userId,
-          `🚨 RETARD DÉTECTÉ : La tâche "${task.titre}" n'est pas terminée à temps.`
+          `🚨 RETARD DÉTECTÉ : La tâche « ${task.titre} » n'est pas terminée à temps.`,
         );
       }
     }

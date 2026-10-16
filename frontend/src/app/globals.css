@@ -42,3 +42,28 @@ body {
 .glass-input::placeholder {
   color: rgba(255, 255, 255, 0.4);
 }
+
+/* Scrollbar visible et stylisée ITEC */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0A2540;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #4FC3F7;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #1E4D8C;
+}
+
+/* Compatibilité Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #4FC3F7 #0A2540;
+}

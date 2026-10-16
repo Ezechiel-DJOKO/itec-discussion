@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { AuthProvider } from '@/context/AuthContext';
+import { NotificationProvider } from '@/context/NotificationContext';
 import PwaRegister from '@/components/PwaRegister';
 
 export const metadata: Metadata = {
@@ -37,8 +38,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="antialiased">
         <AuthProvider>
-          <PwaRegister />
-          {children}
+          <NotificationProvider>
+            <PwaRegister />
+            {children}
+          </NotificationProvider>
         </AuthProvider>
       </body>
     </html>

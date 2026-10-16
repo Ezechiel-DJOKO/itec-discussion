@@ -3,42 +3,33 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
-import api from '@/lib/api';
-import { Notification } from '@/types';
-import { Bell, Settings, MessageSquare, LogOut, User, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { useNotifications } from '@/context/NotificationContext';
+import { Bell, Settings, MessageSquare, LogOut, User, ShieldCheck, CheckCheck } from 'lucide-react';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
-  const [notifs, setNotifs] = useState<Notification[]>([]);
+  const {
+    notifications,
+    unreadNotifsCount,
+    totalUnreadChats,
+    marquerCommeLue,
+    marquerToutCommeLue,
+  } = useNotifications();
+
   const [openNotifs, setOpenNotifs] = useState(false);
   const [openProfile, setOpenProfile] = useState(false);
 
-  const fetchNotifs = async () => {
-    try {
-      const res = await api.get('/notifications');
-      setNotifs(res.data);
-    } catch {}
-  };
-
+  // Fermer les menus au clic extérieur (sécurité UX)
   useEffect(() => {
-    if (user) {
-      fetchNotifs();
-      const interval = setInterval(fetchNotifs, 30000);
-      return () => clearInterval(interval);
-    }
-  }, [user]);
-
-  const nonLues = notifs.filter((n) => !n.lu).length;
-
-  const markAllAsRead = async () => {
-    try {
-      await api.patch('/notifications/read-all');
-      setNotifs(notifs.map((n) => ({ ...n, lu: true })));
-    } catch {}
-  };
+    if (!openNotifs && !openProfile) return;
+    const close = () => { setOpenNotifs(false); setOpenProfile(false); };
+    // petit délai pour ne pas fermer immédiatement sur le même clic
+    const t = setTimeout(() => window.addEventListener('click', close), 0);
+    return () => { clearTimeout(t); window.removeEventListener('click', close); };
+  }, [openNotifs, openProfile]);
 
   return (
-    <nav className="glass-card rounded-none border-t-0 border-x-0 border-b border-white/10 px-4 sm:px-6 py-3 flex justify-between items-center sticky top-0 z-50">
+    <nav className="bg-[#0A2540]/95 backdrop-blur-md border-b border-[#1E4D8C] px-4 sm:px-6 py-3 flex justify-between items-center sticky top-0 z-50">
       
       {/* LOGO ITEC */}
       <Link href="/dashboard" className="flex items-center gap-3 hover:opacity-80 transition">
@@ -50,20 +41,29 @@ export default function Navbar() {
 
       <div className="flex items-center gap-2 sm:gap-4">
         
-        {/* BOUTON CHAT GLOBAL */}
+        {/* BOUTON CHAT GLOBAL + PASTILLE ROUGE */}
         <Link 
           href="/dashboard/chat" 
-          className="flex items-center gap-2 text-xs sm:text-sm font-medium bg-white/10 hover:bg-white/20 text-white px-3 py-2 rounded-xl transition"
+          className="relative flex items-center gap-2 text-xs sm:text-sm font-medium bg-[#1E4D8C]/50 hover:bg-[#1E4D8C] text-white px-3 py-2 rounded-xl transition border border-[#1E4D8C]"
+          onClick={(e) => e.stopPropagation()}
         >
           <MessageSquare size={16} />
           <span className="hidden sm:block">Discussions</span>
+
+          {/* Badge messages non lus */}
+          {totalUnreadChats > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full border-2 border-[#0A2540] animate-pulse shadow-lg">
+              {totalUnreadChats > 99 ? '99+' : totalUnreadChats}
+            </span>
+          )}
         </Link>
 
         {/* BOUTON SUPER ADMIN */}
         {user?.isSuperAdmin && (
           <Link 
             href="/admin" 
-            className="flex items-center gap-2 text-xs sm:text-sm font-semibold bg-itec-sky/20 hover:bg-itec-sky/30 text-itec-sky px-3 py-2 rounded-xl transition border border-itec-sky/30"
+            className="flex items-center gap-2 text-xs sm:text-sm font-semibold bg-[#4FC3F7]/15 hover:bg-[#4FC3F7]/25 text-[#4FC3F7] px-3 py-2 rounded-xl transition border border-[#4FC3F7]/30"
+            onClick={(e) => e.stopPropagation()}
           >
             <Settings size={16} />
             <span className="hidden sm:block">Admin</span>
@@ -71,46 +71,56 @@ export default function Navbar() {
         )}
 
         {/* CLOCHE NOTIFS */}
-        <div className="relative">
+        <div className="relative" onClick={(e) => e.stopPropagation()}>
           <button
             onClick={() => { setOpenNotifs(!openNotifs); setOpenProfile(false); }}
-            className="relative p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition"
+            className="relative p-2 text-white/80 hover:text-white hover:bg-[#1E4D8C]/50 rounded-full transition"
           >
             <Bell size={20} />
-            {nonLues > 0 && (
-              <span className="absolute top-0 right-0 bg-itec-red text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full border-2 border-itec-dark">
-                {nonLues}
+            {unreadNotifsCount > 0 && (
+              <span className="absolute top-0 right-0 bg-red-500 text-white text-[10px] font-bold min-w-[16px] h-4 px-0.5 flex items-center justify-center rounded-full border-2 border-[#0A2540] animate-pulse">
+                {unreadNotifsCount > 9 ? '9+' : unreadNotifsCount}
               </span>
             )}
           </button>
 
-                    {/* DROPDOWN NOTIFICATIONS */}
+          {/* DROPDOWN NOTIFICATIONS */}
           {openNotifs && (
-            <div className="absolute right-0 mt-3 w-72 sm:w-80 bg-[#0A2540] border border-white/20 overflow-hidden shadow-2xl rounded-2xl z-50">
-              <div className="flex justify-between items-center p-3 sm:p-4 border-b border-white/10 bg-black/40">
+            <div className="absolute right-0 mt-3 w-72 sm:w-80 bg-[#0A2540] border border-[#1E4D8C] overflow-hidden shadow-2xl rounded-2xl z-50">
+              <div className="flex justify-between items-center p-3 sm:p-4 border-b border-[#1E4D8C] bg-[#0F2D4A]">
                 <span className="font-semibold text-white text-sm">Notifications</span>
-                {nonLues > 0 && (
+                {unreadNotifsCount > 0 && (
                   <button
-                    onClick={markAllAsRead}
-                    className="text-xs text-itec-sky hover:underline"
+                    onClick={marquerToutCommeLue}
+                    className="text-xs text-[#4FC3F7] hover:text-white flex items-center gap-1 transition"
                   >
-                    Tout lire
+                    <CheckCheck size={14} /> Tout lire
                   </button>
                 )}
               </div>
-              <div className="max-h-80 overflow-y-auto divide-y divide-white/10">
-                {notifs.length === 0 ? (
+              <div className="max-h-80 overflow-y-auto divide-y divide-[#1E4D8C]/50 custom-scrollbar">
+                {notifications.length === 0 ? (
                   <div className="p-6 text-center text-xs text-white/50">
                     Aucune notification
                   </div>
                 ) : (
-                  notifs.map((n) => (
+                  notifications.map((n) => (
                     <div
                       key={n.id}
-                      className={`p-3 text-xs ${n.lu ? 'opacity-50' : 'bg-white/5'}`}
+                      onClick={() => !n.lu && marquerCommeLue(n.id)}
+                      className={`p-3 text-xs cursor-pointer transition ${
+                        n.lu ? 'opacity-50 hover:opacity-80' : 'bg-[#1E4D8C]/25 hover:bg-[#1E4D8C]/40'
+                      }`}
                     >
-                      <p className="text-white/90 leading-relaxed">{n.message}</p>
-                      <p className="text-[10px] text-itec-sky mt-1 font-medium">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className={`text-white/90 leading-relaxed ${!n.lu ? 'font-semibold' : ''}`}>
+                          {n.message}
+                        </p>
+                        {!n.lu && (
+                          <span className="w-2 h-2 rounded-full bg-red-500 shrink-0 mt-1" />
+                        )}
+                      </div>
+                      <p className="text-[10px] text-[#4FC3F7] mt-1 font-medium">
                         {new Date(n.creeLe).toLocaleString('fr-FR')}
                       </p>
                     </div>
@@ -122,20 +132,19 @@ export default function Navbar() {
         </div>
 
         {/* PROFIL DROPDOWN MENU */}
-        <div className="relative border-l border-white/20 pl-3 sm:pl-4">
+        <div className="relative border-l border-[#1E4D8C] pl-3 sm:pl-4" onClick={(e) => e.stopPropagation()}>
           <button
             onClick={() => { setOpenProfile(!openProfile); setOpenNotifs(false); }}
-            className="flex items-center gap-2 text-white hover:bg-white/10 p-1.5 rounded-xl transition"
+            className="flex items-center gap-2 text-white hover:bg-[#1E4D8C]/50 p-1.5 rounded-xl transition"
           >
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-itec-sky to-blue-600 flex items-center justify-center font-black text-white text-xs shadow-md">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#4FC3F7] to-[#1E4D8C] flex items-center justify-center font-black text-white text-xs shadow-md">
               {user?.nom?.charAt(0).toUpperCase()}
             </div>
           </button>
 
-                    {/* DROPDOWN PROFIL */}
           {openProfile && (
-            <div className="absolute right-0 mt-3 w-64 bg-[#0A2540] border border-white/20 overflow-hidden shadow-2xl rounded-2xl p-4 z-50 space-y-4">
-              <div className="border-b border-white/10 pb-3">
+            <div className="absolute right-0 mt-3 w-64 bg-[#0A2540] border border-[#1E4D8C] overflow-hidden shadow-2xl rounded-2xl p-4 z-50 space-y-4">
+              <div className="border-b border-[#1E4D8C] pb-3">
                 <div className="font-bold text-white text-sm flex items-center justify-between gap-2">
                   <span className="truncate">{user?.nom}</span>
                   {user?.isSuperAdmin && (
@@ -144,7 +153,7 @@ export default function Navbar() {
                     </span>
                   )}
                 </div>
-                <div className="text-xs text-itec-sky truncate mt-0.5">
+                <div className="text-xs text-[#4FC3F7] truncate mt-0.5">
                   {user?.email}
                 </div>
                 <div className="mt-2 text-[10px] font-bold uppercase tracking-wider text-white/40 bg-white/5 px-2 py-1 rounded w-fit">
@@ -154,11 +163,11 @@ export default function Navbar() {
 
               <div className="space-y-1">
                 <Link
-                  href="/dashboard/profile" // 👈 ASSURE-TOI QUE C'EST BIEN CE LIEN
+                  href="/dashboard/profile"
                   onClick={() => setOpenProfile(false)}
-                  className="flex items-center gap-2 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 p-2 rounded-lg transition"
+                  className="flex items-center gap-2 text-xs font-semibold text-white/80 hover:text-white hover:bg-[#1E4D8C]/50 p-2 rounded-lg transition"
                 >
-                  <User size={16} className="text-itec-sky" /> Mon Profil
+                  <User size={16} className="text-[#4FC3F7]" /> Mon Profil
                 </Link>
                 <button
                   onClick={logout}

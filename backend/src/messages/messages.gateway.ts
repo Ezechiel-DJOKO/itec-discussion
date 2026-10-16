@@ -3,16 +3,30 @@ import {
   WebSocketServer,
   SubscribeMessage,
   MessageBody,
+  ConnectedSocket,
+  OnGatewayConnection,
 } from '@nestjs/websockets';
-import { Server } from 'socket.io';
+import { Server, Socket } from 'socket.io';
 
 @WebSocketGateway({
   cors: { origin: true, credentials: true },
   transports: ['websocket', 'polling'],
 })
-export class MessagesGateway {
+export class MessagesGateway implements OnGatewayConnection {
   @WebSocketServer()
   server: Server;
+
+  // Chaque client rejoint sa room perso → notifs ciblées
+  handleConnection(client: Socket) {
+    try {
+      const userId =
+        (client.handshake.auth as any)?.userId ||
+        (client.handshake.query as any)?.userId;
+      if (userId) {
+        client.join(`user_${userId}`);
+      }
+    } catch {}
+  }
 
   // ─── MESSAGES PROJETS ───
   diffuserProjectMessage(projectId: string, message: any) {
@@ -37,11 +51,15 @@ export class MessagesGateway {
     this.server.emit(`task_${taskId}_comment`, comment);
   }
 
-  // 🔴 NOUVEAU : GESTION DU "TYPING..." (En train d'écrire)
-  
+  // ─── NOTIFICATIONS ───
+  diffuserNotification(userId: string, notification: any) {
+    this.server.to(`user_${userId}`).emit('new_notification', notification);
+    this.server.emit('new_notification', { ...notification, targetUserId: userId });
+  }
+
+  // ─── TYPING ───
   @SubscribeMessage('typing_start')
   handleTypingStart(@MessageBody() data: { room: string; userName: string }) {
-    // Diffuse à tout le monde dans la room SAUF l'expéditeur
     this.server.emit(`${data.room}_typing`, { userName: data.userName, isTyping: true });
   }
 
