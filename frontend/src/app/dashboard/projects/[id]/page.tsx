@@ -140,7 +140,7 @@ function TaskFilesSection({ task, userId, isChef, canUpload }: { task: Task; use
   );
 }
 
-// ── COMPOSANT 2 : README DE LA TÂCHE (rempli par l'assigné, uniquement task.readme) ──
+// ── COMPOSANT 2 : README DE LA TÂCHE (avec support d'API PATCH & PUT) ──
 function TaskAssigneeReadme({ task, canEdit, onUpdated }: { task: Task; canEdit: boolean; onUpdated: (t: Task) => void }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -152,11 +152,24 @@ function TaskAssigneeReadme({ task, canEdit, onUpdated }: { task: Task; canEdit:
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await api.patch(`/tasks/${task.id}`, { readme: text });
+      let res;
+      try {
+        res = await api.patch(`/tasks/${task.id}`, { readme: text });
+      } catch (err: any) {
+        if (err.response?.status === 404 || err.response?.status === 405) {
+          res = await api.put(`/tasks/${task.id}`, { readme: text });
+        } else {
+          throw err;
+        }
+      }
       onUpdated(res.data);
       setEditing(false);
-    } catch {
-      alert('Erreur lors de la sauvegarde du readme');
+    } catch (err: any) {
+      console.error('Erreur lors de la sauvegarde du readme:', err);
+      const message = Array.isArray(err.response?.data?.message) 
+        ? err.response?.data?.message.join(', ') 
+        : err.response?.data?.message || err.message || 'Erreur inconnue';
+      alert(`Erreur lors de la sauvegarde : ${message}`);
     } finally {
       setSaving(false);
     }
@@ -547,7 +560,7 @@ function ProjectDetailContent() {
                           canUpload={canUpload(task)} 
                         />
 
-                        {/* README DE LA TÂCHE (placé juste sous Fichiers, rempli uniquement par l'assigné) */}
+                        {/* README DE LA TÂCHE */}
                         <TaskAssigneeReadme 
                           task={task} 
                           canEdit={canUpload(task)} 

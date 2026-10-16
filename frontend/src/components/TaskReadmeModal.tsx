@@ -29,11 +29,24 @@ export default function TaskReadmeModal({
   const handleSave = async () => {
     setLoading(true);
     try {
-      const res = await api.patch(`/tasks/${task.id}`, { description });
+      let res;
+      try {
+        res = await api.patch(`/tasks/${task.id}`, { description });
+      } catch (err: any) {
+        if (err.response?.status === 404 || err.response?.status === 405) {
+          res = await api.put(`/tasks/${task.id}`, { description });
+        } else {
+          throw err;
+        }
+      }
       onTaskUpdated(res.data);
       setIsEditing(false);
-    } catch (err) {
-      alert('Erreur lors de la sauvegarde des détails.');
+    } catch (err: any) {
+      console.error('Erreur mise à jour détails:', err);
+      const msg = Array.isArray(err.response?.data?.message)
+        ? err.response?.data?.message.join(', ')
+        : err.response?.data?.message || 'Erreur lors de la sauvegarde';
+      alert(`Erreur : ${msg}`);
     } finally {
       setLoading(false);
     }
@@ -72,7 +85,7 @@ export default function TaskReadmeModal({
                 onChange={(e) => setDescription(e.target.value)}
                 rows={14}
                 placeholder="Rédigez ici tous les détails de la tâche..."
-                className="w-full bg-[#1E4D8C]/20 text-[#4FC3F7] border border-[#1E4D8C] rounded-xl p-4 text-sm focus:outline-none focus:border-[#4FC3F7] resize-none custom-scrollbar"
+                className="w-full bg-[#1E4D8C]/20 text-white border border-[#1E4D8C] rounded-xl p-4 text-sm focus:outline-none focus:border-[#4FC3F7] resize-none custom-scrollbar"
               />
             </div>
           ) : (
