@@ -17,17 +17,23 @@ export default function TaskReadmeModal({
   onTaskUpdated: (t: Task) => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const [readmeText, setReadmeText] = useState(task.readme || '');
+  // 💡 LECTURE INTELLIGENTE : on prend readme OU description
+  const contentInitial = task.readme || task.description || '';
+  const [readmeText, setReadmeText] = useState(contentInitial);
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await api.put(`/tasks/${task.id}`, { readme: readmeText });
+      // On sauvegarde dans les 2 champs pour garantie absolue
+      const res = await api.put(`/tasks/${task.id}`, { 
+        readme: readmeText,
+        description: readmeText 
+      });
       onTaskUpdated(res.data);
       setEditing(false);
     } catch {
-      alert('Erreur lors de la sauvegarde du readme');
+      alert('Erreur lors de la sauvegarde');
     } finally {
       setSaving(false);
     }
@@ -37,6 +43,8 @@ export default function TaskReadmeModal({
     task.assignes && task.assignes.length > 0
       ? task.assignes.map((a: any) => `${a.prenom || ''} ${a.nom || ''}`.trim()).join(', ')
       : (task as any).assigneA?.nom || 'Personne';
+
+  const textToShow = editing ? readmeText : (task.readme || task.description || '');
 
   return (
     <div className="fixed inset-0 bg-[#0A2540]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -50,7 +58,7 @@ export default function TaskReadmeModal({
             </div>
             <div>
               <span className="text-[10px] font-black text-[#4FC3F7] uppercase tracking-widest">
-                Cahier des charges
+                Cahier des charges / Readme
               </span>
               <h3 className="text-xl font-bold text-white mt-1 leading-tight">{task.titre}</h3>
             </div>
@@ -69,15 +77,15 @@ export default function TaskReadmeModal({
             <textarea
               value={readmeText}
               onChange={(e) => setReadmeText(e.target.value)}
-              placeholder="Rédigez les instructions détaillées, le cahier des charges, les critères d'acceptation..."
+              placeholder="Rédigez les instructions détaillées, le cahier des charges..."
               rows={14}
               className="w-full bg-[#1E4D8C]/20 border border-[#1E4D8C] p-4 rounded-xl text-sm text-white resize-none font-mono focus:outline-none focus:border-[#4FC3F7] placeholder-white/30"
               autoFocus
             />
           ) : (
             <div className="bg-[#1E4D8C]/10 p-5 rounded-xl border border-[#1E4D8C]/40 text-sm text-white/90 whitespace-pre-wrap leading-relaxed min-h-[220px]">
-              {task.readme ? (
-                task.readme
+              {textToShow ? (
+                textToShow
               ) : (
                 <p className="text-white/30 italic text-center py-12">
                   Aucune instruction rédigée pour cette tâche.
@@ -98,7 +106,7 @@ export default function TaskReadmeModal({
             {isChef && !editing && (
               <button
                 onClick={() => {
-                  setReadmeText(task.readme || '');
+                  setReadmeText(task.readme || task.description || '');
                   setEditing(true);
                 }}
                 className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition border border-white/10"
@@ -112,7 +120,7 @@ export default function TaskReadmeModal({
                 <button
                   onClick={() => {
                     setEditing(false);
-                    setReadmeText(task.readme || '');
+                    setReadmeText(task.readme || task.description || '');
                   }}
                   className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-white/70 text-xs font-bold px-4 py-2.5 rounded-xl transition"
                 >

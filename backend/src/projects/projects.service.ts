@@ -12,6 +12,7 @@ import { ProjectMember, MemberRole } from './entities/project-member.entity.js';
 import { CreateProjectDto } from './dto/create-project.dto.js';
 import { UpdateProjectDto } from './dto/update-project.dto.js';
 import { UsersService } from '../users/users.service.js';
+import { User, AppPermission } from '../users/entities/user.entity.js'; // Assure-toi du bon chemin
 
 @Injectable()
 export class ProjectsService {
@@ -25,55 +26,63 @@ export class ProjectsService {
 
   // ─── CRÉER UN PROJET ───────────────────────────────────
   async create(dto: CreateProjectDto, userId: string): Promise<Project> {
+    const user: any = await this.usersService.findById(userId); // ou findOne selon ton UsersService
+    if (!user) {
+      throw new NotFoundException('Utilisateur introuvable');
+    }
+
+    // Vérification basée sur ton entité User (isSuperAdmin & permissions)
+    const isSuperAdmin = user.isSuperAdmin === true;
+    const hasPermission = 
+      user.permissions?.includes(AppPermission.CAN_CREATE_PROJECT) || 
+      user.permissions?.includes(AppPermission.CAN_ACCESS_QG);
+
+    if (!isSuperAdmin && !hasPermission) {
+      throw new ForbiddenException(
+        'Seuls les responsables et administrateurs du QG peuvent créer un projet.',
+      );
+    }
+
     if (new Date(dto.dateFin) <= new Date(dto.dateDebut)) {
       throw new BadRequestException(
         'La date de fin doit être après la date de début',
       );
     }
 
+    // CORRECTION TYPEORM : on utilise createur: { id: userId }
     const project = this.projectRepo.create({
       nom: dto.nom,
       description: dto.description,
       dateDebut: dto.dateDebut,
       dateFin: dto.dateFin,
-      createdById: userId,
+      statut: ProjectStatut.EN_COURS,
+      createur: { id: userId } as any, 
     });
 
     const saved = await this.projectRepo.save(project);
 
-    // Ajouter le créateur comme CHEF
-    await this.memberRepo.save(
-      this.memberRepo.create({
-        projectId: saved.id,
-        userId,
-        role: MemberRole.CHEF,
-      }),
-    );
+    const membership = this.memberRepo.create({
+      projectId: saved.id,
+      userId: userId,
+      role: MemberRole.CHEF,
+    });
+    await this.memberRepo.save(membership);
 
-    // Ajouter les membres invités
-    if (dto.membresIds && dto.membresIds.length > 0) {
-      // Filtrer pour ne pas se ré-ajouter soi-même
-      const idsUniques = [...new Set(dto.membresIds)].filter(
-        (id) => id !== userId,
-      );
+    // CORRECTION TYPEORM v0.3 : syntaxe objet pour les relations
+    const finalProject = await this.projectRepo.findOne({
+      where: { id: saved.id },
+      relations: {
+        createur: true,
+        membres: {
+          user: true,
+        },
+      },
+    });
 
-      for (const membreId of idsUniques) {
-        // Vérifier que l'utilisateur existe
-        await this.usersService.findById(membreId);
-        await this.memberRepo.save(
-          this.memberRepo.create({
-            projectId: saved.id,
-            userId: membreId,
-            role: MemberRole.MEMBRE,
-          }),
-        );
-      }
-    }
-
-    return this.findOne(saved.id, userId);
+    return finalProject as Project;
   }
 
-    // ─── MES PROJETS (ceux où je suis membre) ─────────────
+  // ─── MES PROJETS (ceux où je suis membre) ─────────────
   async findMyProjects(userId: string): Promise<Project[]> {
     const memberships = await this.memberRepo.find({
       where: { userId },
@@ -96,7 +105,7 @@ export class ProjectsService {
       .getMany();
   }
 
-    // ─── DÉTAIL D'UN PROJET ────────────────────────────────
+  // ─── DÉTAIL D'UN PROJET ────────────────────────────────
   async findOne(projectId: string, userId: string): Promise<Project> {
     const project = await this.projectRepo.findOne({
       where: { id: projectId },
@@ -110,7 +119,6 @@ export class ProjectsService {
 
     if (!project) throw new NotFoundException('Projet introuvable');
 
-    // Vérifier que l'utilisateur est membre
     const isMember = project.membres.some((m) => m.userId === userId);
     if (!isMember) {
       throw new ForbiddenException("Vous n'êtes pas membre de ce projet");
@@ -149,42 +157,34 @@ export class ProjectsService {
   // ─── ARCHIVER UN PROJET (Chef uniquement) ─────────────
   async archive(projectId: string, userId: string): Promise<{ message: string }> {
     await this.assertIsChef(projectId, userId);
-
     const project = await this.projectRepo.findOne({ where: { id: projectId } });
     if (!project) throw new NotFoundException('Projet introuvable');
 
     project.statut = ProjectStatut.ARCHIVE;
     await this.projectRepo.save(project);
-
     return { message: 'Projet archivé avec succès' };
   }
 
-    // ─── DÉSARCHIVER UN PROJET (Chef uniquement) ──────────
+  // ─── DÉSARCHIVER UN PROJET (Chef uniquement) ──────────
   async unarchive(projectId: string, userId: string): Promise<{ message: string }> {
     await this.assertIsChef(projectId, userId);
-
     const project = await this.projectRepo.findOne({ where: { id: projectId } });
     if (!project) throw new NotFoundException('Projet introuvable');
 
-    // On remet le projet "en cours"
     project.statut = ProjectStatut.EN_COURS;
     await this.projectRepo.save(project);
-
     return { message: 'Projet réactivé avec succès' };
   }
 
-    // ─── SUPPRIMER UN PROJET (Chef uniquement) ─
+  // ─── SUPPRIMER UN PROJET (Chef uniquement) ────────────
   async remove(projectId: string, userId: string): Promise<{ message: string }> {
     await this.assertIsChef(projectId, userId);
-
     const project = await this.projectRepo.findOne({
       where: { id: projectId },
     });
     if (!project) throw new NotFoundException('Projet introuvable');
 
-    // On supprime vraiment de la base de données
     await this.projectRepo.remove(project);
-
     return { message: 'Projet supprimé définitivement' };
   }
 
@@ -196,16 +196,13 @@ export class ProjectsService {
   ): Promise<Project> {
     await this.assertIsChef(projectId, chefId);
 
-    // Vérifier limite de 20
     const count = await this.memberRepo.count({ where: { projectId } });
     if (count >= 20) {
       throw new BadRequestException('Limite de 20 membres atteinte');
     }
 
-    // Vérifier que l'user existe
     await this.usersService.findById(newUserId);
 
-    // Vérifier qu'il n'est pas déjà membre
     const existant = await this.memberRepo.findOne({
       where: { projectId, userId: newUserId },
     });
