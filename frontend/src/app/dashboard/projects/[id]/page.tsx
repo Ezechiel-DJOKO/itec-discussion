@@ -15,7 +15,7 @@ import EditTaskModal from '@/components/EditTaskModal';
 import { 
   ArrowLeft, Archive, LogOut, Calendar, User as UserIcon, CheckCircle, 
   Clock, ShieldAlert, Plus, Trash2, BookOpen, Upload, Download, 
-  Users, FileText, Settings, Edit3
+  Users, FileText, Settings, Edit3, MessageSquareText
 } from 'lucide-react';
 
 const statutConfig: Record<TaskStatut, { label: string; color: string }> = {
@@ -50,6 +50,7 @@ function iconeFichier(mimetype: string, nom: string) {
   return '📎';
 }
 
+// ── COMPOSANT 1 : FICHIERS JOINTS ──
 function TaskFilesSection({ task, userId, isChef, canUpload }: { task: Task; userId: string; isChef: boolean; canUpload: boolean }) {
   const [files, setFiles] = useState<TaskFile[]>([]);
   const [loading, setLoading] = useState(false);
@@ -96,7 +97,7 @@ function TaskFilesSection({ task, userId, isChef, canUpload }: { task: Task; use
   };
 
   return (
-    <div className="mt-4 pt-3 border-t border-white/10">
+    <div className="mt-4 pt-3 border-t border-white/5">
       <button onClick={() => setOpen(!open)} className="text-xs font-bold text-[#4FC3F7] hover:text-white transition flex items-center gap-1.5 uppercase tracking-wide">
         <FileText size={14} /> Fichiers Joints {open ? '▲' : '▼'} {!open && files.length > 0 && `(${files.length})`}
       </button>
@@ -139,6 +140,76 @@ function TaskFilesSection({ task, userId, isChef, canUpload }: { task: Task; use
   );
 }
 
+// ── COMPOSANT 2 : README DE LA TÂCHE (rempli par l'assigné, uniquement task.readme) ──
+function TaskAssigneeReadme({ task, canEdit, onUpdated }: { task: Task; canEdit: boolean; onUpdated: (t: Task) => void }) {
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(task.readme || '');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { setText(task.readme || ''); }, [task.readme]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const res = await api.patch(`/tasks/${task.id}`, { readme: text });
+      onUpdated(res.data);
+      setEditing(false);
+    } catch {
+      alert('Erreur lors de la sauvegarde du readme');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-2 pt-2 border-t border-white/5">
+      <button onClick={() => setOpen(!open)} className="text-xs font-bold text-emerald-400 hover:text-white transition flex items-center gap-1.5 uppercase tracking-wide">
+        <MessageSquareText size={14} /> Readme de la tâche {open ? '▲' : '▼'}
+      </button>
+
+      {open && (
+        <div className="mt-3 bg-black/20 p-4 rounded-xl border border-emerald-500/20 shadow-inner">
+          {editing ? (
+            <div className="space-y-3">
+              <textarea
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder="Rédigez ici votre readme : explications, étapes suivies, bilans..."
+                rows={5}
+                className="w-full bg-[#1E4D8C]/20 border border-emerald-500/50 p-3 rounded-lg text-sm text-white resize-none focus:outline-none focus:border-emerald-400 placeholder-white/30 custom-scrollbar"
+              />
+              <div className="flex justify-end gap-2">
+                <button onClick={() => { setText(task.readme || ''); setEditing(false); }} className="text-xs text-white/50 px-3 py-1.5 hover:text-white transition">Annuler</button>
+                <button onClick={handleSave} disabled={saving} className="bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 px-4 py-1.5 rounded-lg text-xs font-bold transition disabled:opacity-50">
+                  {saving ? 'Enregistrement...' : 'Enregistrer le readme'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              {task.readme && task.readme.trim() ? (
+                <div className="text-sm text-white/90 whitespace-pre-wrap leading-relaxed bg-[#1E4D8C]/10 p-3 rounded-lg border border-emerald-500/20">
+                  {task.readme}
+                </div>
+              ) : (
+                <div className="italic text-white/40 text-xs py-2">Aucun readme rédigé pour le moment. L'assigné peut le compléter ici.</div>
+              )}
+              
+              {canEdit && (
+                <button onClick={() => setEditing(true)} className="mt-3 text-xs font-bold text-emerald-400 hover:underline flex items-center gap-1 bg-emerald-950/40 px-3 py-1.5 rounded-lg w-fit">
+                  <Edit3 size={14} /> {task.readme ? 'Modifier le readme' : 'Rédiger le readme'}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── PAGE PRINCIPALE ──
 function ProjectDetailContent() {
   const { user } = useAuth();
   const router = useRouter();
@@ -152,7 +223,8 @@ function ProjectDetailContent() {
 
   const [showNewTask, setShowNewTask] = useState(false);
   const [showAssigneeModal, setShowAssigneeModal] = useState(false);
-  const [selectedTaskReadme, setSelectedTaskReadme] = useState<Task | null>(null);
+  
+  const [selectedTaskDetails, setSelectedTaskDetails] = useState<Task | null>(null);
   const [showEditProject, setShowEditProject] = useState(false);
   const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
   
@@ -257,7 +329,7 @@ function ProjectDetailContent() {
           <ArrowLeft size={18} /> Retour aux espaces
         </Link>
 
-        {/* ── EN-TÊTE PROJET ── */}
+        {/* EN-TÊTE PROJET */}
         <div className="glass-card p-6 sm:p-8 relative overflow-hidden bg-[#1E4D8C]/20 border border-[#1E4D8C]">
           <div className="absolute top-0 right-0 w-64 h-64 bg-[#4FC3F7]/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
           
@@ -296,7 +368,7 @@ function ProjectDetailContent() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
-          {/* ── COLONNE TÂCHES (2/3) ── */}
+          {/* COLONNE TÂCHES */}
           <div className="lg:col-span-2 space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -311,7 +383,6 @@ function ProjectDetailContent() {
               </div>
             </div>
 
-            {/* RESTAURATION DES FILTRES DE STATUT */}
             <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
               {['tous', 'a_faire', 'en_cours', 'en_attente', 'termine'].map((s) => (
                 <button
@@ -328,14 +399,14 @@ function ProjectDetailContent() {
               ))}
             </div>
 
-            {/* FORMULAIRE DE CRÉATION DE TÂCHE */}
+            {/* FORMULAIRE CRÉATION TÂCHE */}
             {showNewTask && (
               <form onSubmit={handleCreateTask} className="bg-[#0A2540] p-6 space-y-5 border border-[#1E4D8C] rounded-2xl shadow-xl">
                 <h3 className="font-bold text-white text-lg">Créer une tâche</h3>
                 {taskErreur && <div className="text-sm text-red-300 bg-red-500/20 px-4 py-3 rounded-xl border border-red-500/30">{taskErreur}</div>}
                 
                 <input type="text" placeholder="Titre de la tâche *" value={taskForm.titre} onChange={(e) => setTaskForm({ ...taskForm, titre: e.target.value })} required className="w-full bg-[#1E4D8C]/30 border border-[#1E4D8C] px-4 py-3 rounded-xl text-white focus:outline-none focus:border-[#4FC3F7]" />
-                <textarea placeholder="Description (Readme de la tâche)" value={taskForm.description} onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })} rows={4} className="w-full bg-[#1E4D8C]/30 border border-[#1E4D8C] px-4 py-3 rounded-xl resize-none text-white focus:outline-none focus:border-[#4FC3F7]" />
+                <textarea placeholder="Détails / consignes de la tâche..." value={taskForm.description} onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })} rows={4} className="w-full bg-[#1E4D8C]/30 border border-[#1E4D8C] px-4 py-3 rounded-xl resize-none text-white focus:outline-none focus:border-[#4FC3F7]" />
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
@@ -351,17 +422,14 @@ function ProjectDetailContent() {
                     </select>
                   </div>
                   
-                  {/* SECTEUR ASSIGNATION (Popup blanche intégrée) */}
                   <div className="col-span-1 sm:col-span-2 mt-2 relative">
                     <label className="text-xs font-bold text-gray-300 mb-1 block uppercase">Assigné à *</label>
-                    
                     <button type="button" onClick={() => setShowAssigneeModal(!showAssigneeModal)} className="w-full flex items-center justify-between bg-[#1E4D8C]/30 hover:bg-[#1E4D8C]/50 transition-colors border border-[#1E4D8C] px-4 py-3 rounded-xl text-sm text-white focus:outline-none focus:border-[#4FC3F7]">
                       <span className="truncate">
                         {taskForm.assignesIds.length === 0 ? '— Personne —' : taskForm.assignesIds.length === (project?.membres?.length || 0) && (project?.membres?.length || 0) > 0 ? '🌐 Tout le monde' : `${taskForm.assignesIds.length} membre(s) sélectionné(s)`}
                       </span>
                       <span className="text-gray-400 text-xs">▼</span>
                     </button>
-
                     {showAssigneeModal && (
                       <>
                         <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-xs" onClick={() => setShowAssigneeModal(false)} />
@@ -407,7 +475,7 @@ function ProjectDetailContent() {
               </form>
             )}
 
-            {/* 📜 LISTE DES TÂCHES */}
+            {/* LISTE DES TÂCHES */}
             <div className="space-y-4">
               {tasksFiltrees.map((task) => {
                 const retard = isEnRetard(task);
@@ -438,10 +506,10 @@ function ProjectDetailContent() {
                           </span>
                         </div>
                         
-                        {/* RESTAURATION DE LA LISTE DÉROULANTE DE STATUT */}
+                        {/* BOUTONS ACTIONS */}
                         <div className="mt-4 flex flex-wrap items-center gap-2">
-                          <button onClick={() => setSelectedTaskReadme(task)} className="text-xs font-bold bg-white/5 hover:bg-white/10 border border-white/10 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition">
-                            <BookOpen size={14}/> Voir détails & Readme
+                          <button onClick={() => setSelectedTaskDetails(task)} className="text-xs font-bold bg-[#4FC3F7]/20 hover:bg-[#4FC3F7]/30 border border-[#4FC3F7]/40 text-[#4FC3F7] px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition">
+                            <BookOpen size={14}/> Détails de la tâche
                           </button>
                           
                           {canChangeStatut(task) && (
@@ -470,8 +538,22 @@ function ProjectDetailContent() {
                             </>
                           )}
                         </div>
-                        
-                        <TaskFilesSection task={task} userId={user?.id || ''} isChef={isChef} canUpload={canUpload(task)} />
+
+                        {/* FICHIERS JOINTS */}
+                        <TaskFilesSection 
+                          task={task} 
+                          userId={user?.id || ''} 
+                          isChef={isChef} 
+                          canUpload={canUpload(task)} 
+                        />
+
+                        {/* README DE LA TÂCHE (placé juste sous Fichiers, rempli uniquement par l'assigné) */}
+                        <TaskAssigneeReadme 
+                          task={task} 
+                          canEdit={canUpload(task)} 
+                          onUpdated={(updated) => setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))} 
+                        />
+
                       </div>
                     </div>
                   </div>
@@ -480,7 +562,7 @@ function ProjectDetailContent() {
             </div>
           </div>
 
-          {/* ── COLONNE MEMBRES ── */}
+          {/* COLONNE MEMBRES */}
           <div className="space-y-6">
             <div className="bg-[#0A2540] border border-[#1E4D8C] p-6 rounded-2xl shadow-lg">
               <h2 className="text-lg font-bold text-white mb-5 flex items-center gap-2"><Users className="text-[#4FC3F7]" size={20}/> Équipe</h2>
@@ -506,11 +588,23 @@ function ProjectDetailContent() {
         </div>
       </main>
 
-      {selectedTaskReadme && <TaskReadmeModal task={selectedTaskReadme} isChef={isChef} onClose={() => setSelectedTaskReadme(null)} onTaskUpdated={(updatedTask) => { setTasks(tasks.map((t) => (t.id === updatedTask.id ? updatedTask : t))); setSelectedTaskReadme(updatedTask); }} />}
+      {/* MODALE : Détails de la tâche */}
+      {selectedTaskDetails && (
+        <TaskReadmeModal 
+          task={selectedTaskDetails} 
+          isChef={isChef} 
+          onClose={() => setSelectedTaskDetails(null)} 
+          onTaskUpdated={(updatedTask) => { 
+            setTasks(tasks.map((t) => (t.id === updatedTask.id ? updatedTask : t))); 
+            setSelectedTaskDetails(updatedTask); 
+          }} 
+        />
+      )}
+      
       {showEditProject && project && <EditProjectModal project={project} onClose={() => setShowEditProject(false)} onUpdated={(p) => setProject({ ...project, ...p })} />}
       {taskToEdit && <EditTaskModal task={taskToEdit} membres={project?.membres || []} onClose={() => setTaskToEdit(null)} onUpdated={(updated) => { setTasks(tasks.map((t) => t.id === updated.id ? updated : t)); fetchAll(); }} />}
       
-      {/* 💬 COMPOSANT CHAT */}
+      {/* COMPOSANT CHAT */}
       <ProjectChat
         projectId={project.id}
         currentUser={user}
