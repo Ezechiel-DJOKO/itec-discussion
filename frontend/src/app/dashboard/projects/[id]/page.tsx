@@ -18,12 +18,11 @@ import {
   Users, FileText, Settings, Edit3
 } from 'lucide-react';
 
-// ─── Helpers UI ──────────────────────────────────────────
 const statutConfig: Record<TaskStatut, { label: string; color: string }> = {
-  a_faire: { label: 'À faire', color: 'bg-white/10 text-white/60 border border-white/20' },
-  en_cours: { label: 'En cours', color: 'bg-itec-sky/20 text-itec-sky border border-itec-sky/30' },
-  en_attente: { label: 'En attente', color: 'bg-orange-500/20 text-orange-400 border border-orange-500/30' },
-  termine: { label: 'Terminé', color: 'bg-green-500/20 text-green-400 border border-green-500/30' },
+  a_faire: { label: 'À faire', color: 'bg-white/10 text-white/60 border-white/20' },
+  en_cours: { label: 'En cours', color: 'bg-[#4FC3F7]/10 text-[#4FC3F7] border-[#4FC3F7]/30' },
+  en_attente: { label: 'En attente', color: 'bg-orange-500/20 text-orange-400 border-orange-500/30' },
+  termine: { label: 'Terminé', color: 'bg-green-500/20 text-green-400 border-green-500/30' },
 };
 
 const prioriteConfig: Record<TaskPriorite, { label: string; color: string }> = {
@@ -51,7 +50,6 @@ function iconeFichier(mimetype: string, nom: string) {
   return '📎';
 }
 
-// ─── Composant Fichiers d'une tâche ──────────────────────
 function TaskFilesSection({ task, userId, isChef, canUpload }: { task: Task; userId: string; isChef: boolean; canUpload: boolean }) {
   const [files, setFiles] = useState<TaskFile[]>([]);
   const [loading, setLoading] = useState(false);
@@ -99,7 +97,7 @@ function TaskFilesSection({ task, userId, isChef, canUpload }: { task: Task; use
 
   return (
     <div className="mt-4 pt-3 border-t border-white/10">
-      <button onClick={() => setOpen(!open)} className="text-xs font-bold text-itec-sky hover:text-white transition flex items-center gap-1.5 uppercase tracking-wide">
+      <button onClick={() => setOpen(!open)} className="text-xs font-bold text-[#4FC3F7] hover:text-white transition flex items-center gap-1.5 uppercase tracking-wide">
         <FileText size={14} /> Fichiers Joints {open ? '▲' : '▼'} {!open && files.length > 0 && `(${files.length})`}
       </button>
 
@@ -128,7 +126,7 @@ function TaskFilesSection({ task, userId, isChef, canUpload }: { task: Task; use
                     </div>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
-                    <button onClick={() => handleDownload(f)} className="text-itec-sky hover:text-white transition"><Download size={16}/></button>
+                    <button onClick={() => handleDownload(f)} className="text-[#4FC3F7] hover:text-white transition"><Download size={16}/></button>
                     {(isChef || f.uploadedById === userId) && <button onClick={() => handleDelete(f.id)} className="text-red-400 hover:text-red-300 transition"><Trash2 size={16}/></button>}
                   </div>
                 </li>
@@ -141,7 +139,6 @@ function TaskFilesSection({ task, userId, isChef, canUpload }: { task: Task; use
   );
 }
 
-// ─── Page principale ─────────────────────────────────────
 function ProjectDetailContent() {
   const { user } = useAuth();
   const router = useRouter();
@@ -154,7 +151,7 @@ function ProjectDetailContent() {
   const [erreur, setErreur] = useState('');
 
   const [showNewTask, setShowNewTask] = useState(false);
-  const [showAssigneeModal, setShowAssigneeModal] = useState(false); // État pour la popup blanche
+  const [showAssigneeModal, setShowAssigneeModal] = useState(false);
   const [selectedTaskReadme, setSelectedTaskReadme] = useState<Task | null>(null);
   const [showEditProject, setShowEditProject] = useState(false);
   const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
@@ -212,7 +209,6 @@ function ProjectDetailContent() {
         priorite: taskForm.priorite,
         assignesIds: taskForm.assignesIds
       };
-
       const res = await api.post(`/projects/${projectId}/tasks`, payload);
       setTasks((prev) => [res.data, ...prev]);
       setShowNewTask(false);
@@ -227,7 +223,7 @@ function ProjectDetailContent() {
   const handleChangeStatut = async (taskId: string, statut: TaskStatut) => {
     try {
       const res = await api.patch(`/tasks/${taskId}/statut`, { statut });
-      setTasks((prev) => prev.map((t) => (t.id === taskId ? res.data : t))); fetchAll();
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? res.data : t)));
     } catch {}
   };
 
@@ -240,7 +236,7 @@ function ProjectDetailContent() {
   const canUpload = (task: Task) => isChef || task.assignes?.some(a => a.id === user?.id);
   const tasksFiltrees = filtreStatut === 'tous' ? tasks : tasks.filter((t) => t.statut === filtreStatut);
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin w-8 h-8 border-4 border-itec-sky border-t-transparent rounded-full"></div></div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin w-8 h-8 border-4 border-[#4FC3F7] border-t-transparent rounded-full"></div></div>;
 
   if (erreur || !project) return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-4">
@@ -257,7 +253,7 @@ function ProjectDetailContent() {
       <Navbar />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-8 py-8 space-y-6">
-        <Link href="/dashboard" className="flex items-center gap-2 text-itec-sky hover:text-white transition font-medium w-fit">
+        <Link href="/dashboard" className="flex items-center gap-2 text-[#4FC3F7] hover:text-white transition font-medium w-fit">
           <ArrowLeft size={18} /> Retour aux espaces
         </Link>
 
@@ -268,7 +264,7 @@ function ProjectDetailContent() {
           <div className="flex flex-col sm:flex-row justify-between items-start gap-6 relative z-10">
             <div>
               <h1 className="text-3xl font-black text-white">{project.nom}</h1>
-              <p className="text-white/70 mt-2 max-w-2xl">{project.description || 'Pas de description'}</p>
+              <p className="text-white/70 mt-2 max-w-2xl whitespace-pre-wrap">{project.description || 'Pas de description'}</p>
               <div className="flex flex-wrap gap-4 mt-4 text-sm font-medium text-white/50">
                 <span className="flex items-center gap-1.5">
                   <Calendar size={16}/> {new Date(project.dateDebut).toLocaleDateString()} → {new Date(project.dateFin).toLocaleDateString()}
@@ -304,7 +300,7 @@ function ProjectDetailContent() {
           <div className="lg:col-span-2 space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <CheckCircle className="text-itec-sky"/> Tâches du projet
+                <CheckCircle className="text-[#4FC3F7]"/> Tâches du projet
               </h2>
               <div className="flex gap-3 w-full sm:w-auto">
                 {isChef && (
@@ -315,6 +311,23 @@ function ProjectDetailContent() {
               </div>
             </div>
 
+            {/* RESTAURATION DES FILTRES DE STATUT */}
+            <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
+              {['tous', 'a_faire', 'en_cours', 'en_attente', 'termine'].map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setFiltreStatut(s)}
+                  className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition border ${
+                    filtreStatut === s
+                      ? 'bg-[#4FC3F7] text-[#0A2540] border-[#4FC3F7]'
+                      : 'bg-[#1E4D8C]/30 text-white hover:bg-[#1E4D8C]/50 border-[#1E4D8C]'
+                  }`}
+                >
+                  {s === 'tous' ? 'Toutes' : statutConfig[s as TaskStatut].label}
+                </button>
+              ))}
+            </div>
+
             {/* FORMULAIRE DE CRÉATION DE TÂCHE */}
             {showNewTask && (
               <form onSubmit={handleCreateTask} className="bg-[#0A2540] p-6 space-y-5 border border-[#1E4D8C] rounded-2xl shadow-xl">
@@ -322,7 +335,7 @@ function ProjectDetailContent() {
                 {taskErreur && <div className="text-sm text-red-300 bg-red-500/20 px-4 py-3 rounded-xl border border-red-500/30">{taskErreur}</div>}
                 
                 <input type="text" placeholder="Titre de la tâche *" value={taskForm.titre} onChange={(e) => setTaskForm({ ...taskForm, titre: e.target.value })} required className="w-full bg-[#1E4D8C]/30 border border-[#1E4D8C] px-4 py-3 rounded-xl text-white focus:outline-none focus:border-[#4FC3F7]" />
-                <textarea placeholder="Description courte (optionnel)" value={taskForm.description} onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })} rows={2} className="w-full bg-[#1E4D8C]/30 border border-[#1E4D8C] px-4 py-3 rounded-xl resize-none text-white focus:outline-none focus:border-[#4FC3F7]" />
+                <textarea placeholder="Description (Readme de la tâche)" value={taskForm.description} onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })} rows={4} className="w-full bg-[#1E4D8C]/30 border border-[#1E4D8C] px-4 py-3 rounded-xl resize-none text-white focus:outline-none focus:border-[#4FC3F7]" />
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
@@ -342,17 +355,9 @@ function ProjectDetailContent() {
                   <div className="col-span-1 sm:col-span-2 mt-2 relative">
                     <label className="text-xs font-bold text-gray-300 mb-1 block uppercase">Assigné à *</label>
                     
-                    <button 
-                      type="button" 
-                      onClick={() => setShowAssigneeModal(!showAssigneeModal)}
-                      className="w-full flex items-center justify-between bg-[#1E4D8C]/30 hover:bg-[#1E4D8C]/50 transition-colors border border-[#1E4D8C] px-4 py-3 rounded-xl text-sm text-white focus:outline-none focus:border-[#4FC3F7]"
-                    >
+                    <button type="button" onClick={() => setShowAssigneeModal(!showAssigneeModal)} className="w-full flex items-center justify-between bg-[#1E4D8C]/30 hover:bg-[#1E4D8C]/50 transition-colors border border-[#1E4D8C] px-4 py-3 rounded-xl text-sm text-white focus:outline-none focus:border-[#4FC3F7]">
                       <span className="truncate">
-                        {taskForm.assignesIds.length === 0 
-                          ? '— Personne —' 
-                          : taskForm.assignesIds.length === (project?.membres?.length || 0) && (project?.membres?.length || 0) > 0
-                            ? '🌐 Tout le monde'
-                            : `${taskForm.assignesIds.length} membre(s) sélectionné(s)`}
+                        {taskForm.assignesIds.length === 0 ? '— Personne —' : taskForm.assignesIds.length === (project?.membres?.length || 0) && (project?.membres?.length || 0) > 0 ? '🌐 Tout le monde' : `${taskForm.assignesIds.length} membre(s) sélectionné(s)`}
                       </span>
                       <span className="text-gray-400 text-xs">▼</span>
                     </button>
@@ -361,48 +366,24 @@ function ProjectDetailContent() {
                       <>
                         <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-xs" onClick={() => setShowAssigneeModal(false)} />
                         <div className="absolute top-full left-0 right-0 mt-2 z-50 bg-white text-gray-900 rounded-2xl shadow-2xl border border-gray-200 overflow-hidden divide-y divide-gray-200">
-                          {/* Option: — Personne — */}
-                          <button
-                            type="button"
-                            onClick={() => setTaskForm({ ...taskForm, assignesIds: [] })}
-                            className="w-full px-5 py-3.5 flex items-center justify-between text-left hover:bg-gray-50 transition"
-                          >
+                          <button type="button" onClick={() => setTaskForm({ ...taskForm, assignesIds: [] })} className="w-full px-5 py-3.5 flex items-center justify-between text-left hover:bg-gray-50 transition">
                             <span className="text-base font-medium text-gray-800">— Personne —</span>
                             <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${taskForm.assignesIds.length === 0 ? 'border-blue-600 bg-blue-600' : 'border-gray-400'}`}>
                               {taskForm.assignesIds.length === 0 && <div className="w-2 h-2 rounded-full bg-white" />}
                             </div>
                           </button>
-
-                          {/* Option: Tout le monde */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const allIds = project?.membres?.map((m: any) => m.userId) || [];
-                              setTaskForm({ ...taskForm, assignesIds: allIds });
-                            }}
-                            className="w-full px-5 py-3.5 flex items-center justify-between text-left hover:bg-gray-50 transition"
-                          >
+                          <button type="button" onClick={() => { const allIds = project?.membres?.map((m: any) => m.userId) || []; setTaskForm({ ...taskForm, assignesIds: allIds }); }} className="w-full px-5 py-3.5 flex items-center justify-between text-left hover:bg-gray-50 transition">
                             <span className="text-base font-bold text-blue-600">🌐 Tout le monde</span>
                             <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${taskForm.assignesIds.length === (project?.membres?.length || 0) && (project?.membres?.length || 0) > 0 ? 'border-blue-600 bg-blue-600' : 'border-gray-400'}`}>
                               {taskForm.assignesIds.length === (project?.membres?.length || 0) && (project?.membres?.length || 0) > 0 && <div className="w-2 h-2 rounded-full bg-white" />}
                             </div>
                           </button>
-
-                          {/* Individual Members List */}
                           <div className="max-h-56 overflow-y-auto divide-y divide-gray-100 custom-scrollbar">
                             {project?.membres?.map((m: any) => {
                               const isSelected = taskForm.assignesIds.includes(m.userId);
                               const nomComplet = `${(m.user as any)?.prenom || ''} ${m.user?.nom || ''}`.trim();
                               return (
-                                <button
-                                  key={m.userId}
-                                  type="button"
-                                  onClick={() => {
-                                    if (isSelected) setTaskForm({ ...taskForm, assignesIds: taskForm.assignesIds.filter(id => id !== m.userId) });
-                                    else setTaskForm({ ...taskForm, assignesIds: [...taskForm.assignesIds, m.userId] });
-                                  }}
-                                  className="w-full px-5 py-3.5 flex items-center justify-between text-left hover:bg-gray-50 transition"
-                                >
+                                <button key={m.userId} type="button" onClick={() => { if (isSelected) setTaskForm({ ...taskForm, assignesIds: taskForm.assignesIds.filter(id => id !== m.userId) }); else setTaskForm({ ...taskForm, assignesIds: [...taskForm.assignesIds, m.userId] }); }} className="w-full px-5 py-3.5 flex items-center justify-between text-left hover:bg-gray-50 transition">
                                   <span className="text-base font-medium text-gray-900">{nomComplet}</span>
                                   <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${isSelected ? 'border-blue-600 bg-blue-600' : 'border-gray-400'}`}>
                                     {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
@@ -411,11 +392,8 @@ function ProjectDetailContent() {
                               );
                             })}
                           </div>
-
                           <div className="p-2.5 bg-gray-50 text-right">
-                            <button type="button" onClick={() => setShowAssigneeModal(false)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-lg">
-                              Valider
-                            </button>
+                            <button type="button" onClick={() => setShowAssigneeModal(false)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 rounded-lg">Valider</button>
                           </div>
                         </div>
                       </>
@@ -439,7 +417,7 @@ function ProjectDetailContent() {
                       <div className="flex-1 w-full">
                         
                         <div className="flex items-center gap-3 mb-2">
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${statutConfig[task.statut].color}`}>
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${statutConfig[task.statut].color}`}>
                             {statutConfig[task.statut].label}
                           </span>
                           <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${prioriteConfig[task.priorite].color}`}>
@@ -450,34 +428,37 @@ function ProjectDetailContent() {
 
                         <h3 className="font-bold text-lg text-white">{task.titre}</h3>
 
-                        {/* BARRE D'INFORMATIONS TÂCHE (DATE + ASSIGNATIONS) */}
                         <div className="bg-[#1E4D8C]/20 rounded-xl p-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-medium text-gray-300 border border-[#1E4D8C]/50 mt-2">
-                          
-                          {/* Date limite */}
                           <span className={`flex items-center gap-1.5 ${retard ? 'text-red-400' : ''}`}>
                             <Clock size={14}/> {new Date(task.dateLimite).toLocaleDateString()}
                           </span>
-                          
-                          {/* 👈 TON BOUT DE CODE EST PLACÉ EXACTEMENT ICI ! */}
                           <span className="flex items-center gap-1.5 flex-wrap">
                             <UserIcon size={14} className="text-[#4FC3F7]" /> 
-                            {task.assignes && task.assignes.length > 0 
-                              ? task.assignes.map((a: any) => `${a.prenom || ''} ${a.nom || ''}`).join(', ') 
-                              : 'Non assigné'}
+                            {task.assignes && task.assignes.length > 0 ? task.assignes.map((a: any) => `${a.prenom || ''} ${a.nom || ''}`).join(', ') : 'Non assigné'}
                           </span>
-
                         </div>
                         
-                        {/* Actions boutons */}
+                        {/* RESTAURATION DE LA LISTE DÉROULANTE DE STATUT */}
                         <div className="mt-4 flex flex-wrap items-center gap-2">
                           <button onClick={() => setSelectedTaskReadme(task)} className="text-xs font-bold bg-white/5 hover:bg-white/10 border border-white/10 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition">
                             <BookOpen size={14}/> Voir détails & Readme
                           </button>
-                          {canChangeStatut(task) && task.statut !== 'termine' && (
-                            <button onClick={() => handleChangeStatut(task.id, 'termine')} className="text-xs font-bold bg-green-500/20 hover:bg-green-500/30 text-green-400 border border-green-500/30 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition">
-                              <CheckCircle size={14}/> Marquer terminé
-                            </button>
+                          
+                          {canChangeStatut(task) && (
+                            <select
+                              value={task.statut}
+                              onChange={(e) => handleChangeStatut(task.id, e.target.value as TaskStatut)}
+                              className={`text-xs font-bold px-3 py-1.5 rounded-lg border appearance-none cursor-pointer focus:outline-none transition-colors ${
+                                statutConfig[task.statut].color
+                              }`}
+                            >
+                              <option value="a_faire" className="bg-[#0A2540] text-white">À faire</option>
+                              <option value="en_cours" className="bg-[#0A2540] text-white">En cours</option>
+                              <option value="en_attente" className="bg-[#0A2540] text-white">En attente</option>
+                              <option value="termine" className="bg-[#0A2540] text-white">Terminé</option>
+                            </select>
                           )}
+
                           {isChef && (
                             <>
                               <button onClick={() => setTaskToEdit(task)} className="text-xs font-bold bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 border border-yellow-500/30 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition">
@@ -543,7 +524,7 @@ function ProjectDetailContent() {
 
 export default function ProjectDetailPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-spin w-8 h-8 border-4 border-itec-sky border-t-transparent rounded-full"></div></div>}>
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-spin w-8 h-8 border-4 border-[#4FC3F7] border-t-transparent rounded-full"></div></div>}>
       <ProjectDetailContent />
     </Suspense>
   );

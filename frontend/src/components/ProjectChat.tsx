@@ -6,7 +6,7 @@ import Cookies from 'js-cookie';
 import { User } from '@/types';
 import {
   MessageSquare, X, Send, Mic, Image as ImageIcon, Paperclip, Download,
-  Edit2, Trash2, Copy, Forward, Reply, ChevronDown, ChevronsDown, Trash, Pin, MoreVertical, SmilePlus
+  Edit2, Trash2, Copy, Forward, Reply, ChevronDown, ChevronsDown, Trash, Pin, SmilePlus
 } from 'lucide-react';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { getSocket } from '@/lib/socket';
@@ -45,6 +45,8 @@ export default function ProjectChat({
   const [forwardMessage, setForwardMessage] = useState<Message | null>(null);
   const [myProjects, setMyProjects] = useState<any[]>([]);
   const [uploading, setUploading] = useState(false);
+  
+  // États de scroll
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [unreadScrollCount, setUnreadScrollCount] = useState(0);
   const showScrollBtnRef = useRef(false);
@@ -69,6 +71,7 @@ export default function ProjectChat({
     setShowScrollBtn(false);
     setUnreadScrollCount(0);
   };
+  
   const focusComposer = () => setTimeout(() => { inputRef.current?.focus(); inputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 60);
 
   const pinnedMsg = [...messages].reverse().find((m) => m.isPinned && !m.isDeleted);
@@ -86,7 +89,6 @@ export default function ProjectChat({
 
   const formatChrono = (secs: number) => `${Math.floor(secs / 60).toString().padStart(2, '0')}:${(secs % 60).toString().padStart(2, '0')}`;
 
-  // Ouvrir / fermer → badge + flag global
   const handleOpen = (value: boolean) => {
     setOpen(value);
     if (typeof window !== 'undefined' && (window as any).__setOpenProjectChat) {
@@ -94,6 +96,7 @@ export default function ProjectChat({
     }
     if (value) {
       resetChatUnread(projectId);
+      setUnreadScrollCount(0);
     }
   };
 
@@ -106,8 +109,11 @@ export default function ProjectChat({
     const socket = getSocket();
     const onNew = (newMsg: Message) => {
       setMessages((prev) => { if (prev.some((m) => m.id === newMsg.id)) return prev; return [...prev, newMsg]; });
-      if (showScrollBtnRef.current) setUnreadScrollCount((c) => c + 1);
-      else scrollBottom();
+      if (showScrollBtnRef.current) {
+        setUnreadScrollCount((c) => c + 1);
+      } else {
+        scrollBottom();
+      }
     };
     const onUpdate = (updated: Message) => setMessages((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
     const onTyping = ({ userName, isTyping }: { userName: string; isTyping: boolean }) => {
@@ -127,7 +133,6 @@ export default function ProjectChat({
       socket.off(`project_${projectId}_message`, onNew);
       socket.off(`project_${projectId}_message_update`, onUpdate);
       socket.off(`project_${projectId}_typing`, onTyping);
-      // Si on démonte en étant ouvert, on libère le flag
       if (typeof window !== 'undefined' && (window as any).__setOpenProjectChat) {
         (window as any).__setOpenProjectChat(null);
       }
@@ -147,6 +152,7 @@ export default function ProjectChat({
       setReactionMenuId(null);
     }, 400);
   };
+  
   const handlePressEnd = () => { if (pressTimer.current) clearTimeout(pressTimer.current); };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -197,13 +203,16 @@ export default function ProjectChat({
     if (msg.isDeleted || msg.message.startsWith('[')) return alert('Modification impossible');
     setEditingMsgId(msg.id); setTexte(msg.message); setMenuMsgId(null); setReplyToMsg(null); focusComposer();
   };
+  
   const handleDelete = async (id: string) => {
     if (!confirm('Supprimer ce message ?')) return;
     try { await api.delete(`/projects/messages/${id}`); setMenuMsgId(null); } catch { alert('Erreur'); }
   };
+  
   const handlePin = async (msg: Message) => {
     try { await api.patch(`/projects/messages/${msg.id}/pin`); setMenuMsgId(null); } catch { alert('Erreur'); }
   };
+  
   const handleReact = async (msgId: string, emoji: string) => {
     try { await api.post(`/projects/messages/${msgId}/react`, { emoji }); setReactionMenuId(null); setMenuMsgId(null); } catch { alert('Erreur de réaction'); }
   };
@@ -274,13 +283,13 @@ export default function ProjectChat({
 
   return (
     <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[60]">
+      {/* 🔴 BOUTON FLOTTANT PROJET CHAT */}
       {!open && (
         <button
           onClick={() => handleOpen(true)}
           className="relative bg-gradient-to-r from-[#4FC3F7] to-[#1E4D8C] text-white rounded-full w-14 h-14 flex items-center justify-center shadow-[0_0_20px_rgba(79,195,247,0.4)] transition-transform hover:scale-110"
         >
           <MessageSquare size={24} />
-          {/* 🔴 BADGE NON LUS PROJET */}
           {projectUnread > 0 && (
             <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[11px] font-bold min-w-[22px] h-[22px] px-1 rounded-full flex items-center justify-center border-2 border-[#0A2540] animate-bounce shadow-lg">
               {projectUnread > 99 ? '99+' : projectUnread}
@@ -289,8 +298,11 @@ export default function ProjectChat({
         </button>
       )}
 
+      {/* 💬 FENÊTRE DE CHAT */}
       {open && (
         <div className="w-[calc(100vw-2rem)] sm:w-[360px] h-[75vh] sm:h-[500px] flex flex-col rounded-2xl overflow-hidden bg-[#0A2540] border border-[#1E4D8C] shadow-2xl relative">
+          
+          {/* HEADER */}
           <div className="bg-[#07192f] p-3 flex justify-between items-center border-b border-[#1E4D8C] z-10 shadow-sm">
             <h3 className="font-bold text-white flex items-center gap-2 text-sm">
               <MessageSquare size={16} className="text-[#4FC3F7]" />
@@ -299,6 +311,7 @@ export default function ProjectChat({
             <button onClick={() => handleOpen(false)} className="text-white/60 hover:text-white"><X size={20} /></button>
           </div>
 
+          {/* MESSAGE ÉPINGLÉ */}
           {pinnedMsg && (
             <div onClick={() => document.getElementById(`pmsg-${pinnedMsg.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })} className="bg-[#1E4D8C]/40 hover:bg-[#1E4D8C] border-b border-[#1E4D8C] px-3 py-2 flex items-center gap-3 cursor-pointer transition z-10">
               <Pin size={16} className="text-[#4FC3F7] shrink-0" />
@@ -309,81 +322,90 @@ export default function ProjectChat({
             </div>
           )}
 
+          {/* ZONE DES MESSAGES */}
           <div ref={chatBoxRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-3 space-y-3 relative bg-[#0A2540] custom-scrollbar">
             {messages.map((m) => {
               const isMe = m.userId === currentUser?.id;
               const hasReactions = m.reactions && Object.keys(m.reactions).length > 0;
 
               return (
-                <div key={m.id} id={`pmsg-${m.id}`} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                <div key={m.id} id={`pmsg-${m.id}`} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} max-w-[100%] group`}>
                   {!isMe && <span className="text-[10px] font-bold text-[#4FC3F7] mb-0.5 px-1">{m.user?.nom}</span>}
 
-                  <div className="relative flex items-end gap-1 max-w-[90%]">
-                    {!m.isDeleted && (
-                      <div className={`flex flex-col gap-1 ${isMe ? 'order-first mr-1' : 'order-last ml-1'}`}>
-                        <button onClick={() => { setReactionMenuId(reactionMenuId === m.id ? null : m.id); setMenuMsgId(null); }} className="p-1 text-white/40 hover:text-white bg-black/20 rounded-full" title="Réagir"><SmilePlus size={14}/></button>
-                        <button onClick={() => { setMenuMsgId(menuMsgId === m.id ? null : m.id); setReactionMenuId(null); }} className="p-1 text-white/40 hover:text-white bg-black/20 rounded-full" title="Plus"><MoreVertical size={14}/></button>
-                      </div>
-                    )}
-
-                    <div className="flex flex-col">
-                      <div
-                        onTouchStart={() => handlePressStart(m.id)} onTouchEnd={handlePressEnd} onTouchMove={handlePressEnd}
-                        onMouseDown={() => handlePressStart(m.id)} onMouseUp={handlePressEnd} onMouseLeave={handlePressEnd}
-                        className={`px-3 py-2 rounded-2xl text-[13px] break-words shadow-sm select-none ${
-                          m.isDeleted ? 'bg-white/5 text-white/40 italic border border-white/5'
-                            : isMe ? 'bg-[#1E4D8C] text-white rounded-br-sm border border-[#2A65A8]/50'
-                            : 'bg-[#0F2D4A] border border-[#1E4D8C]/60 text-white rounded-tl-sm'
-                        }`}
-                      >
-                        {m.replyTo && !m.isDeleted && (
-                          <div onClick={() => document.getElementById(`pmsg-${m.replyTo!.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })} className="mb-1.5 p-2 bg-black/20 border-l-4 border-[#4FC3F7] rounded text-xs cursor-pointer">
-                            <div className="font-bold text-[#4FC3F7] mb-0.5">{m.replyTo.nom}</div>
-                            <div className="truncate text-white/70">{m.replyTo.preview}</div>
-                          </div>
-                        )}
-                        {parseMessage(m.message)}
-                        <div className="text-[9px] text-white/50 text-right mt-1 flex justify-end gap-1">
-                          {m.isEdited && !m.isDeleted && <span className="italic">modifié</span>}
-                          {new Date(m.creeLe).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                  <div className={`relative max-w-[90%] ${isMe ? 'mr-1' : 'ml-1'}`}>
+                    
+                    {/* BUBBLE (Design WhatsApp) */}
+                    <div
+                      onTouchStart={() => handlePressStart(m.id)} onTouchEnd={handlePressEnd} onTouchMove={handlePressEnd}
+                      onMouseDown={() => handlePressStart(m.id)} onMouseUp={handlePressEnd} onMouseLeave={handlePressEnd}
+                      className={`px-3 py-2 rounded-2xl text-[13px] break-words shadow-sm select-none relative pb-5 ${
+                        m.isDeleted ? 'bg-white/5 text-white/40 italic border border-white/5'
+                          : isMe ? 'bg-[#1E4D8C] text-white rounded-tr-sm border border-[#2A65A8]/50'
+                          : 'bg-[#0F2D4A] border border-[#1E4D8C]/60 text-white rounded-tl-sm'
+                      }`}
+                    >
+                      {/* Reply Overlay */}
+                      {m.replyTo && !m.isDeleted && (
+                        <div onClick={() => document.getElementById(`pmsg-${m.replyTo!.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })} className="mb-1.5 p-2 bg-black/20 border-l-4 border-[#4FC3F7] rounded text-xs cursor-pointer">
+                          <div className="font-bold text-[#4FC3F7] mb-0.5">{m.replyTo.nom}</div>
+                          <div className="truncate text-white/70">{m.replyTo.preview}</div>
                         </div>
+                      )}
+                      
+                      {/* Content */}
+                      {parseMessage(m.message)}
+
+                      {/* Time & Edition Status */}
+                      <div className="absolute bottom-1 right-2 flex items-center gap-1 text-[9px] text-white/50">
+                        {m.isEdited && !m.isDeleted && <span className="italic">modifié</span>}
+                        {new Date(m.creeLe).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                       </div>
 
-                      {hasReactions && !m.isDeleted && (
-                        <div className={`flex flex-wrap gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
-                          {Object.entries(m.reactions!).map(([emoji, users]) => {
-                            const iReacted = users.includes(currentUser?.id || '');
-                            return (
-                              <button key={emoji} onClick={() => handleReact(m.id, emoji)} className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] border ${iReacted ? 'bg-[#4FC3F7]/20 border-[#4FC3F7] text-[#4FC3F7]' : 'bg-[#07192f] border-white/10 text-white/70'}`}>
-                                <span>{emoji}</span><span className="font-bold">{users.length}</span>
-                              </button>
-                            );
-                          })}
+                      {/* CHEVRON & REACTIONS ACTION (Apparaît au survol, style WhatsApp) */}
+                      {!m.isDeleted && (
+                        <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-md rounded-lg p-0.5 flex items-center gap-1 z-10 border border-white/10">
+                          <button onClick={() => { setReactionMenuId(reactionMenuId === m.id ? null : m.id); setMenuMsgId(null); }} className="p-1 text-white/70 hover:text-white" title="Réagir"><SmilePlus size={14}/></button>
+                          <button onClick={() => { setMenuMsgId(menuMsgId === m.id ? null : m.id); setReactionMenuId(null); }} className="p-1 text-white/70 hover:text-white" title="Options"><ChevronDown size={16}/></button>
                         </div>
                       )}
                     </div>
 
+                    {/* Affichage des réactions enregistrées */}
+                    {hasReactions && !m.isDeleted && (
+                      <div className={`flex flex-wrap gap-1 mt-1 relative z-0 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                        {Object.entries(m.reactions!).map(([emoji, users]) => {
+                          const iReacted = users.includes(currentUser?.id || '');
+                          return (
+                            <button key={emoji} onClick={() => handleReact(m.id, emoji)} className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] border ${iReacted ? 'bg-[#4FC3F7]/20 border-[#4FC3F7] text-[#4FC3F7]' : 'bg-[#07192f] border-white/10 text-white/70'}`}>
+                              <span>{emoji}</span><span className="font-bold">{users.length}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* MENU DE REACTIONS (Popup) */}
                     {reactionMenuId === m.id && (
-                      <div className={`absolute z-40 ${isMe ? 'right-8' : 'left-8'} -top-10 bg-[#07192f] border border-[#1E4D8C] p-1.5 rounded-full shadow-2xl flex gap-1`}>
+                      <div className={`absolute z-40 ${isMe ? 'right-0' : 'left-0'} -top-10 bg-[#07192f] border border-[#1E4D8C] p-1.5 rounded-full shadow-2xl flex gap-1`}>
                         {['👍', '❤️', '😂', '🚀', '👀'].map((e) => (
-                          <button key={e} onClick={() => handleReact(m.id, e)} className="hover:bg-white/10 p-1.5 rounded-full text-lg hover:scale-125">{e}</button>
+                          <button key={e} onClick={() => handleReact(m.id, e)} className="hover:bg-white/10 p-1.5 rounded-full text-lg hover:scale-125 transition-transform">{e}</button>
                         ))}
                       </div>
                     )}
 
+                    {/* MENU D'OPTIONS DU MESSAGE (Popup Chevron) */}
                     {menuMsgId === m.id && (
                       <div className={`absolute z-30 top-6 ${isMe ? 'right-0' : 'left-0'} bg-[#0A2540] border border-[#1E4D8C] p-1.5 min-w-[140px] rounded-lg shadow-xl`}>
                         {!m.isDeleted && (
                           <>
-                            <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white hover:bg-[#1E4D8C] rounded" onClick={() => { setReplyToMsg(m); setMenuMsgId(null); focusComposer(); }}><Reply size={14} /> Répondre</button>
-                            <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white hover:bg-[#1E4D8C] rounded" onClick={() => handleCopy(m)}><Copy size={14} /> Copier</button>
-                            <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white hover:bg-[#1E4D8C] rounded" onClick={() => { setForwardMessage(m); setMenuMsgId(null); api.get('/projects').then((res) => setMyProjects(res.data)); }}><Forward size={14} /> Transférer</button>
-                            {isChef && <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[#4FC3F7] hover:bg-[#1E4D8C] rounded" onClick={() => handlePin(m)}><Pin size={14} /> {m.isPinned ? 'Désépingler' : 'Épingler'}</button>}
-                            {isMe && !m.message.startsWith('[') && <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white hover:bg-[#1E4D8C] rounded" onClick={() => handleEdit(m)}><Edit2 size={14} /> Modifier</button>}
+                            <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white hover:bg-[#1E4D8C] rounded transition" onClick={() => { setReplyToMsg(m); setMenuMsgId(null); focusComposer(); }}><Reply size={14} /> Répondre</button>
+                            <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white hover:bg-[#1E4D8C] rounded transition" onClick={() => handleCopy(m)}><Copy size={14} /> Copier</button>
+                            <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white hover:bg-[#1E4D8C] rounded transition" onClick={() => { setForwardMessage(m); setMenuMsgId(null); api.get('/projects').then((res) => setMyProjects(res.data)); }}><Forward size={14} /> Transférer</button>
+                            {isChef && <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[#4FC3F7] hover:bg-[#1E4D8C] rounded transition" onClick={() => handlePin(m)}><Pin size={14} /> {m.isPinned ? 'Désépingler' : 'Épingler'}</button>}
+                            {isMe && !m.message.startsWith('[') && <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white hover:bg-[#1E4D8C] rounded transition" onClick={() => handleEdit(m)}><Edit2 size={14} /> Modifier</button>}
                           </>
                         )}
-                        {isMe && !m.isDeleted && <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-400 hover:bg-red-500/20 rounded" onClick={() => handleDelete(m.id)}><Trash2 size={14} /> Supprimer</button>}
-                        <button className="w-full text-center py-1 mt-1 text-[10px] text-white/30 border-t border-white/5 uppercase font-bold" onClick={() => setMenuMsgId(null)}>Fermer</button>
+                        {isMe && !m.isDeleted && <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-400 hover:bg-red-500/20 rounded transition" onClick={() => handleDelete(m.id)}><Trash2 size={14} /> Supprimer</button>}
                       </div>
                     )}
                   </div>
@@ -393,6 +415,7 @@ export default function ProjectChat({
             <div ref={endRef} />
           </div>
 
+          {/* 🔴 BOUTON SCROLL BOTTOM AVEC BADGE (WhatsApp style) */}
           {showScrollBtn && (
             <button
               type="button"
@@ -409,6 +432,7 @@ export default function ProjectChat({
             </button>
           )}
 
+          {/* ZONE DE SAISIE */}
           <div className="bg-[#07192f] border-t border-[#1E4D8C] flex flex-col z-30 relative">
             {showMentions && filteredMembers.length > 0 && (
               <div className="absolute bottom-full left-0 right-0 bg-[#0A2540] border-t border-[#1E4D8C] max-h-32 overflow-y-auto z-40 shadow-xl">
@@ -473,6 +497,7 @@ export default function ProjectChat({
         </div>
       )}
 
+      {/* MODAL DE TRANSFERT */}
       {forwardMessage && (
         <div className="fixed inset-0 bg-black/70 z-[70] flex items-center justify-center p-4">
           <div className="bg-[#0A2540] w-full max-w-xs p-5 rounded-2xl space-y-3 border border-[#1E4D8C] shadow-2xl">
