@@ -52,6 +52,7 @@ export class TasksController {
     return this.tasksService.findOne(id, req.user.sub);
   }
 
+  // PUT /tasks/:id
   @Put('tasks/:id')
   update(
     @Param('id') id: string,
@@ -61,6 +62,38 @@ export class TasksController {
     return this.tasksService.update(id, dto, req.user.sub);
   }
 
+  // PATCH /tasks/:id
+  @Patch('tasks/:id')
+  patchUpdate(
+    @Param('id') id: string,
+    @Body() dto: UpdateTaskDto,
+    @Request() req: ReqUser,
+  ) {
+    return this.tasksService.update(id, dto, req.user.sub);
+  }
+
+  // PATCH /tasks/:id/readme
+  @Patch('tasks/:id/readme')
+  patchReadme(
+    @Param('id') id: string,
+    @Body() body: any,
+    @Request() req: ReqUser,
+  ) {
+    const readme = typeof body === 'string' ? body : body?.readme;
+    return this.tasksService.update(id, { readme }, req.user.sub);
+  }
+
+  // PUT /tasks/:id/readme
+  @Put('tasks/:id/readme')
+  putReadme(
+    @Param('id') id: string,
+    @Body() body: any,
+    @Request() req: ReqUser,
+  ) {
+    const readme = typeof body === 'string' ? body : body?.readme;
+    return this.tasksService.update(id, { readme }, req.user.sub);
+  }
+
   @Patch('tasks/:id/statut')
   updateStatut(
     @Param('id') id: string,
@@ -68,16 +101,6 @@ export class TasksController {
     @Request() req: ReqUser,
   ) {
     return this.tasksService.updateStatut(id, dto.statut, req.user.sub);
-  }
-
-  // NOUVEAU : Sauvegarde du README autorisé pour l'assigné
-  @Patch('tasks/:id/readme')
-  updateReadme(
-    @Param('id') id: string,
-    @Body('readme') readme: string,
-    @Request() req: ReqUser,
-  ) {
-    return this.tasksService.updateReadme(id, readme, req.user.sub);
   }
 
   @Delete('tasks/:id')

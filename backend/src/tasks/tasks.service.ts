@@ -36,7 +36,8 @@ export class TasksService {
 
   private async assertIsChef(projectId: string, userId: string) {
     const member = await this.getMembership(projectId, userId);
-    if (member.role !== MemberRole.CHEF) {
+    const roleStr = String(member.role).toLowerCase();
+    if (roleStr !== 'chef' && member.role !== MemberRole.CHEF) {
       throw new ForbiddenException('Seul le chef de projet peut effectuer cette action');
     }
   }
@@ -108,24 +109,49 @@ export class TasksService {
     return task;
   }
 
-  async update(taskId: string, dto: UpdateTaskDto, userId: string): Promise<Task> {
+  // MISE À JOUR GLOBAL & README
+  async update(taskId: string, dto: any, userId: string): Promise<Task> {
     const task = await this.findOne(taskId, userId);
-    await this.assertIsChef(task.projectId, userId);
+    const member = await this.getMembership(task.projectId, userId);
+
+    const roleStr = String(member.role).toLowerCase();
+    const isChef = roleStr === 'chef' || member.role === MemberRole.CHEF || task.createdById === userId;
+    const isAssignee = task.assignes?.some((a) => a.id === userId);
+
+    // CAS SPÉCIFIQUE : Sauvegarde du README (Compte-rendu par l'assigné)
+    if (dto.readme !== undefined) {
+      const hasAssignees = task.assignes && task.assignes.length > 0;
+      
+      // Si la tâche a des assignés, l'un des assignés ou le chef a le droit de modifier le README
+      if (hasAssignees && !isAssignee && !isChef) {
+        throw new ForbiddenException('Seul le collaborateur assigné à cette tâche peut remplir le compte-rendu (README).');
+      }
+
+      task.readme = dto.readme;
+
+      // Si le payload ne contenait QUE le readme, on sauvegarde et on s'arrête là
+      if (Object.keys(dto).length === 1) {
+        return await this.taskRepo.save(task);
+      }
+    }
+
+    // Pour les autres modifications de la tâche (titre, date, etc.), le chef est requis
+    if (!isChef && !isAssignee) {
+      throw new ForbiddenException('Seul un responsable ou chef de projet peut modifier cette tâche.');
+    }
 
     const actor = await this.userRepo.findOne({ where: { id: userId } });
-    const actorName = actor?.nom || 'Un chef de projet';
-
+    const actorName = actor?.nom || 'Un membre du projet';
     const oldAssigneeIds = (task.assignes || []).map((a) => a.id);
 
-    if (dto.assignesIds) {
+    if (dto.assignesIds && isChef) {
       task.assignes = await this.userRepo.findBy({ id: In(dto.assignesIds) });
     }
 
-    if (dto.titre) task.titre = dto.titre;
+    if (dto.titre && isChef) task.titre = dto.titre;
     if (dto.description !== undefined) task.description = dto.description;
-    if (dto.readme !== undefined) task.readme = dto.readme;
-    if (dto.dateLimite) task.dateLimite = dto.dateLimite;
-    if (dto.priorite) task.priorite = dto.priorite;
+    if (dto.dateLimite && isChef) task.dateLimite = dto.dateLimite;
+    if (dto.priorite && isChef) task.priorite = dto.priorite;
     if (dto.statut) task.statut = dto.statut;
 
     await this.taskRepo.save(task);
@@ -133,7 +159,7 @@ export class TasksService {
     const refreshed = await this.findOne(taskId, userId);
     const newAssigneeIds = (refreshed.assignes || []).map((a) => a.id);
 
-    if (dto.assignesIds) {
+    if (dto.assignesIds && isChef) {
       const newlyAssigned = newAssigneeIds.filter((id) => !oldAssigneeIds.includes(id));
       await this.notifyUsers(
         newlyAssigned,
@@ -153,29 +179,12 @@ export class TasksService {
     return refreshed;
   }
 
-  // NOUVEAU : Sauvegarde isolée du Readme (Autorise le collaborateur assigné)
-  async updateReadme(taskId: string, readme: string, userId: string): Promise<Task> {
-    const task = await this.findOne(taskId, userId);
-    const membership = await this.getMembership(task.projectId, userId);
-
-    const isChef = membership.role === MemberRole.CHEF;
-    const isAssignee = task.assignes?.some((a) => a.id === userId);
-
-    if (!isChef && !isAssignee) {
-      throw new ForbiddenException(
-        'Seul le collaborateur assigné ou le chef peut modifier le compte-rendu',
-      );
-    }
-
-    task.readme = readme;
-    return await this.taskRepo.save(task);
-  }
-
   async updateStatut(taskId: string, statut: TaskStatut, userId: string): Promise<Task> {
     const task = await this.findOne(taskId, userId);
     const membership = await this.getMembership(task.projectId, userId);
 
-    const isChef = membership.role === MemberRole.CHEF;
+    const roleStr = String(membership.role).toLowerCase();
+    const isChef = roleStr === 'chef' || membership.role === MemberRole.CHEF;
     const isAssignee = task.assignes?.some((a) => a.id === userId);
 
     if (!isChef && !isAssignee) {
