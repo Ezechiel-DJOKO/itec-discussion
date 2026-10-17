@@ -25,7 +25,6 @@ interface ReqUser {
 export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
-  // POST /projects/:projectId/tasks — Créer une tâche
   @Post('projects/:projectId/tasks')
   create(
     @Param('projectId') projectId: string,
@@ -35,7 +34,6 @@ export class TasksController {
     return this.tasksService.create(projectId, dto, req.user.sub);
   }
 
-  // GET /projects/:projectId/tasks — Lister les tâches d'un projet
   @Get('projects/:projectId/tasks')
   findByProject(
     @Param('projectId') projectId: string,
@@ -44,19 +42,16 @@ export class TasksController {
     return this.tasksService.findByProject(projectId, req.user.sub);
   }
 
-  // GET /tasks/mine — Mes tâches assignées
   @Get('tasks/mine')
   findMyTasks(@Request() req: ReqUser) {
     return this.tasksService.findMyTasks(req.user.sub);
   }
 
-  // GET /tasks/:id — Détail d'une tâche
   @Get('tasks/:id')
   findOne(@Param('id') id: string, @Request() req: ReqUser) {
     return this.tasksService.findOne(id, req.user.sub);
   }
 
-  // PUT /tasks/:id — Modifier une tâche (chef)
   @Put('tasks/:id')
   update(
     @Param('id') id: string,
@@ -66,7 +61,6 @@ export class TasksController {
     return this.tasksService.update(id, dto, req.user.sub);
   }
 
-  // PATCH /tasks/:id/statut — Changer le statut
   @Patch('tasks/:id/statut')
   updateStatut(
     @Param('id') id: string,
@@ -76,25 +70,32 @@ export class TasksController {
     return this.tasksService.updateStatut(id, dto.statut, req.user.sub);
   }
 
-  // DELETE /tasks/:id — Supprimer une tâche
+  // NOUVEAU : Sauvegarde du README autorisé pour l'assigné
+  @Patch('tasks/:id/readme')
+  updateReadme(
+    @Param('id') id: string,
+    @Body('readme') readme: string,
+    @Request() req: ReqUser,
+  ) {
+    return this.tasksService.updateReadme(id, readme, req.user.sub);
+  }
+
   @Delete('tasks/:id')
   remove(@Param('id') id: string, @Request() req: ReqUser) {
     return this.tasksService.remove(id, req.user.sub);
   }
 
-  // POST /tasks/trigger-check — Test manuel (Admin/Dev)
-@Post('tasks/trigger-check')
-triggerCheck(@Request() req: ReqUser) {
-  return this.tasksService.triggerOverdueCheck(req.user.sub);
-}
+  @Post('tasks/trigger-check')
+  triggerCheck(@Request() req: ReqUser) {
+    return this.tasksService.triggerOverdueCheck(req.user.sub);
+  }
 
-// PATCH /tasks/:id/surplus — Accorder du surplus
-@Patch('tasks/:id/surplus')
-addSurplus(
-  @Param('id') id: string,
-  @Body('jours') jours: number,
-  @Request() req: ReqUser,
-) {
-  return this.tasksService.addSurplus(id, Number(jours), req.user.sub);
-}
+  @Patch('tasks/:id/surplus')
+  addSurplus(
+    @Param('id') id: string,
+    @Body('jours') jours: number,
+    @Request() req: ReqUser,
+  ) {
+    return this.tasksService.addSurplus(id, Number(jours), req.user.sub);
+  }
 }

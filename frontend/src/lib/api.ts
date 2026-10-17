@@ -6,7 +6,6 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-// Intercepteur : ajoute le token JWT à chaque requête
 api.interceptors.request.use((config) => {
   const token = Cookies.get('token');
   if (token) {
@@ -14,19 +13,5 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
-
-// Intercepteur : déconnecte si le token est expiré
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      Cookies.remove('token');
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login';
-      }
-    }
-    return Promise.reject(error);
-  },
-);
 
 export default api;

@@ -26,7 +26,9 @@ export class AuthService {
     return {
       message: 'Inscription réussie ! Bienvenue 🎉',
       utilisateur: result,
+      user: result,
       token,
+      access_token: token,
     };
   }
 
@@ -38,7 +40,8 @@ export class AuthService {
       throw new UnauthorizedException('Email ou mot de passe incorrect');
     }
 
-    if (!user.actif) {
+    // Ne bloque que si le compte est explicitement désactivé (false)
+    if (user.actif === false) {
       throw new UnauthorizedException('Ce compte a été désactivé');
     }
 
@@ -53,7 +56,9 @@ export class AuthService {
     return {
       message: 'Connexion réussie !',
       utilisateur: result,
+      user: result,
       token,
+      access_token: token,
     };
   }
 

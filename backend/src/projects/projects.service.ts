@@ -12,7 +12,7 @@ import { ProjectMember, MemberRole } from './entities/project-member.entity.js';
 import { CreateProjectDto } from './dto/create-project.dto.js';
 import { UpdateProjectDto } from './dto/update-project.dto.js';
 import { UsersService } from '../users/users.service.js';
-import { User, AppPermission } from '../users/entities/user.entity.js'; // Assure-toi du bon chemin
+import { User, AppPermission } from '../users/entities/user.entity.js';
 
 @Injectable()
 export class ProjectsService {
@@ -26,18 +26,22 @@ export class ProjectsService {
 
   // ─── CRÉER UN PROJET ───────────────────────────────────
   async create(dto: CreateProjectDto, userId: string): Promise<Project> {
-    const user: any = await this.usersService.findById(userId); // ou findOne selon ton UsersService
+    const user: any = await this.usersService.findById(userId);
     if (!user) {
       throw new NotFoundException('Utilisateur introuvable');
     }
 
-    // Vérification basée sur ton entité User (isSuperAdmin & permissions)
     const isSuperAdmin = user.isSuperAdmin === true;
-    const hasPermission = 
-      user.permissions?.includes(AppPermission.CAN_CREATE_PROJECT) || 
+    const isResponsableOrAdmin =
+      user.isResponsable === true ||
+      user.role === 'admin' ||
+      user.role === 'responsable';
+
+    const hasPermission =
+      user.permissions?.includes(AppPermission.CAN_CREATE_PROJECT) ||
       user.permissions?.includes(AppPermission.CAN_ACCESS_QG);
 
-    if (!isSuperAdmin && !hasPermission) {
+    if (!isSuperAdmin && !isResponsableOrAdmin && !hasPermission) {
       throw new ForbiddenException(
         'Seuls les responsables et administrateurs du QG peuvent créer un projet.',
       );
@@ -49,14 +53,13 @@ export class ProjectsService {
       );
     }
 
-    // CORRECTION TYPEORM : on utilise createur: { id: userId }
     const project = this.projectRepo.create({
       nom: dto.nom,
       description: dto.description,
       dateDebut: dto.dateDebut,
       dateFin: dto.dateFin,
       statut: ProjectStatut.EN_COURS,
-      createur: { id: userId } as any, 
+      createur: { id: userId } as any,
     });
 
     const saved = await this.projectRepo.save(project);
@@ -68,7 +71,6 @@ export class ProjectsService {
     });
     await this.memberRepo.save(membership);
 
-    // CORRECTION TYPEORM v0.3 : syntaxe objet pour les relations
     const finalProject = await this.projectRepo.findOne({
       where: { id: saved.id },
       relations: {
@@ -82,27 +84,55 @@ export class ProjectsService {
     return finalProject as Project;
   }
 
-  // ─── MES PROJETS (ceux où je suis membre) ─────────────
+  // ─── MES PROJETS (Récupération sécurisée et complète) ───
   async findMyProjects(userId: string): Promise<Project[]> {
-    const memberships = await this.memberRepo.find({
-      where: { userId },
-      select: {
-        projectId: true,
-      },
-    });
+    const user: any = await this.usersService.findById(userId);
 
-    if (memberships.length === 0) return [];
+    // 1. Si SuperAdmin, Admin ou Responsable -> Voir TOUS les projets
+    const isAdminOrResponsable =
+      user?.isSuperAdmin === true ||
+      user?.isResponsable === true ||
+      user?.role === 'admin' ||
+      user?.role === 'responsable' ||
+      user?.permissions?.includes(AppPermission.CAN_ACCESS_QG);
 
-    const projectIds = memberships.map((m) => m.projectId);
+    if (isAdminOrResponsable) {
+      return this.projectRepo.find({
+        relations: {
+          createur: true,
+          membres: {
+            user: true,
+          },
+        },
+        order: { creeLe: 'DESC' },
+      });
+    }
 
+    // 2. Sinon -> Voir les projets dont l'utilisateur est Membre OU Créateur
     return this.projectRepo
       .createQueryBuilder('project')
       .leftJoinAndSelect('project.createur', 'createur')
       .leftJoinAndSelect('project.membres', 'membres')
       .leftJoinAndSelect('membres.user', 'user')
-      .where('project.id IN (:...projectIds)', { projectIds })
+      .where('membres.userId = :userId OR createur.id = :userId', { userId })
       .orderBy('project.creeLe', 'DESC')
       .getMany();
+  }
+
+  // ─── ALIAS FINDALL (Pour compatibilité si appelé par le contrôleur) ──
+  async findAll(userId?: string): Promise<Project[]> {
+    if (userId) {
+      return this.findMyProjects(userId);
+    }
+    return this.projectRepo.find({
+      relations: {
+        createur: true,
+        membres: {
+          user: true,
+        },
+      },
+      order: { creeLe: 'DESC' },
+    });
   }
 
   // ─── DÉTAIL D'UN PROJET ────────────────────────────────
@@ -119,15 +149,25 @@ export class ProjectsService {
 
     if (!project) throw new NotFoundException('Projet introuvable');
 
-    const isMember = project.membres.some((m) => m.userId === userId);
-    if (!isMember) {
+    const user: any = await this.usersService.findById(userId);
+    const isAdminOrResponsable =
+      user?.isSuperAdmin === true ||
+      user?.isResponsable === true ||
+      user?.role === 'admin' ||
+      user?.role === 'responsable' ||
+      user?.permissions?.includes(AppPermission.CAN_ACCESS_QG);
+
+    const isMember = project.membres?.some((m) => m.userId === userId);
+    const isCreator = project.createur?.id === userId;
+
+    if (!isMember && !isCreator && !isAdminOrResponsable) {
       throw new ForbiddenException("Vous n'êtes pas membre de ce projet");
     }
 
     return project;
   }
 
-  // ─── MODIFIER UN PROJET (Chef uniquement) ─────────────
+  // ─── MODIFIER UN PROJET (Chef / Admin) ────────────────
   async update(
     projectId: string,
     dto: UpdateProjectDto,
@@ -154,7 +194,7 @@ export class ProjectsService {
     return this.findOne(projectId, userId);
   }
 
-  // ─── ARCHIVER UN PROJET (Chef uniquement) ─────────────
+  // ─── ARCHIVER UN PROJET ───────────────────────────────
   async archive(projectId: string, userId: string): Promise<{ message: string }> {
     await this.assertIsChef(projectId, userId);
     const project = await this.projectRepo.findOne({ where: { id: projectId } });
@@ -165,7 +205,7 @@ export class ProjectsService {
     return { message: 'Projet archivé avec succès' };
   }
 
-  // ─── DÉSARCHIVER UN PROJET (Chef uniquement) ──────────
+  // ─── DÉSARCHIVER UN PROJET ────────────────────────────
   async unarchive(projectId: string, userId: string): Promise<{ message: string }> {
     await this.assertIsChef(projectId, userId);
     const project = await this.projectRepo.findOne({ where: { id: projectId } });
@@ -176,7 +216,7 @@ export class ProjectsService {
     return { message: 'Projet réactivé avec succès' };
   }
 
-  // ─── SUPPRIMER UN PROJET (Chef uniquement) ────────────
+  // ─── SUPPRIMER UN PROJET ──────────────────────────────
   async remove(projectId: string, userId: string): Promise<{ message: string }> {
     await this.assertIsChef(projectId, userId);
     const project = await this.projectRepo.findOne({
@@ -188,7 +228,7 @@ export class ProjectsService {
     return { message: 'Projet supprimé définitivement' };
   }
 
-  // ─── AJOUTER UN MEMBRE (Chef uniquement) ──────────────
+  // ─── AJOUTER UN MEMBRE ────────────────────────────────
   async addMember(
     projectId: string,
     newUserId: string,
@@ -221,7 +261,7 @@ export class ProjectsService {
     return this.findOne(projectId, chefId);
   }
 
-  // ─── RETIRER UN MEMBRE (Chef uniquement) ──────────────
+  // ─── RETIRER UN MEMBRE ────────────────────────────────
   async removeMember(
     projectId: string,
     targetUserId: string,
@@ -246,7 +286,7 @@ export class ProjectsService {
     return this.findOne(projectId, chefId);
   }
 
-  // ─── QUITTER UN PROJET (Membre) ───────────────────────
+  // ─── QUITTER UN PROJET ────────────────────────────────
   async leaveProject(
     projectId: string,
     userId: string,
@@ -268,8 +308,20 @@ export class ProjectsService {
     return { message: 'Vous avez quitté le projet' };
   }
 
-  // ─── HELPER : vérifier que l'user est chef ────────────
+  // ─── HELPER : Vérifier les droits d'administration ──────
   private async assertIsChef(projectId: string, userId: string): Promise<void> {
+    const user: any = await this.usersService.findById(userId);
+
+    // Les Admins et Responsables ont les droits de gestion complets
+    if (
+      user?.isSuperAdmin === true ||
+      user?.isResponsable === true ||
+      user?.role === 'admin' ||
+      user?.role === 'responsable'
+    ) {
+      return;
+    }
+
     const member = await this.memberRepo.findOne({
       where: { projectId, userId },
     });

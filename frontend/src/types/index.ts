@@ -3,13 +3,9 @@ export interface User {
   nom: string;
   email: string;
   avatar?: string;
-  prenom?: string;
-  
-  // Champs pour les droits et rôles
   role?: 'admin' | 'responsable' | 'membre' | string;
+  prenom?: string;
   isResponsable?: boolean;
-  isSuperAdmin?: boolean;
-  permissions?: string[];
 }
 
 export interface ProjectMember {

@@ -41,7 +41,6 @@ export default function ProjectChat({
   const [replyToMsg, setReplyToMsg] = useState<Message | null>(null);
   const [open, setOpen] = useState(false);
   const [menuMsgId, setMenuMsgId] = useState<string | null>(null);
-  const [reactionMenuId, setReactionMenuId] = useState<string | null>(null);
   const [forwardMessage, setForwardMessage] = useState<Message | null>(null);
   const [myProjects, setMyProjects] = useState<any[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -76,6 +75,16 @@ export default function ProjectChat({
 
   const pinnedMsg = [...messages].reverse().find((m) => m.isPinned && !m.isDeleted);
 
+  // Fonction utilitaire de prévisualisation hissée pour être utilisée partout
+  const getPreviewText = (msg: string) => {
+    if (!msg) return '';
+    if (msg.startsWith('[AUDIO]')) return '🎤 Message vocal';
+    if (msg.startsWith('[IMAGE]')) return '📷 Image';
+    if (msg.startsWith('[FILE]')) return '📎 ' + (msg.split('|')[1] || 'Document');
+    if (msg.startsWith('[TRANSFERT]')) return '🔄 Message transféré';
+    return msg;
+  };
+
   useEffect(() => {
     showScrollBtnRef.current = showScrollBtn;
   }, [showScrollBtn]);
@@ -86,8 +95,6 @@ export default function ProjectChat({
     else { clearInterval(interval); }
     return () => clearInterval(interval);
   }, [isRecording]);
-
-  const formatChrono = (secs: number) => `${Math.floor(secs / 60).toString().padStart(2, '0')}:${(secs % 60).toString().padStart(2, '0')}`;
 
   const handleOpen = (value: boolean) => {
     setOpen(value);
@@ -100,6 +107,18 @@ export default function ProjectChat({
     }
   };
 
+  const formatChrono = (secs: number) =>
+  `${Math.floor(secs / 60).toString().padStart(2, '0')}:${(secs % 60).toString().padStart(2, '0')}`;
+
+  // Gestion du retour au focus de l'onglet
+  useEffect(() => {
+    const handleFocus = () => {
+      if (open && projectId) resetChatUnread(projectId);
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [open, projectId, resetChatUnread]);
+
   useEffect(() => {
     if (!open || !projectId) return;
 
@@ -109,12 +128,24 @@ export default function ProjectChat({
     const socket = getSocket();
     const onNew = (newMsg: Message) => {
       setMessages((prev) => { if (prev.some((m) => m.id === newMsg.id)) return prev; return [...prev, newMsg]; });
+      
+      // Notification Push native si l'utilisateur n'est pas sur la page
+      if (!document.hasFocus() && newMsg.userId !== currentUser?.id) {
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+          new Notification(`💬 ${projectName || 'Projet'} - ${newMsg.user?.nom || 'Équipe'}`, {
+            body: getPreviewText(newMsg.message),
+            icon: '/favicon.ico'
+          });
+        }
+      }
+
       if (showScrollBtnRef.current) {
         setUnreadScrollCount((c) => c + 1);
       } else {
         scrollBottom();
       }
     };
+
     const onUpdate = (updated: Message) => setMessages((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
     const onTyping = ({ userName, isTyping }: { userName: string; isTyping: boolean }) => {
       if (userName === currentUser?.nom) return;
@@ -137,7 +168,7 @@ export default function ProjectChat({
         (window as any).__setOpenProjectChat(null);
       }
     };
-  }, [open, projectId]);
+  }, [open, projectId, projectName, currentUser]);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const isNotBottom = e.currentTarget.scrollHeight - e.currentTarget.scrollTop - e.currentTarget.clientHeight > 80;
@@ -149,8 +180,7 @@ export default function ProjectChat({
     pressTimer.current = setTimeout(() => {
       if (navigator.vibrate) navigator.vibrate(50);
       setMenuMsgId(id);
-      setReactionMenuId(null);
-    }, 400);
+    }, 400); // Déclenche le menu contextuel WhatsApp-like après 400ms (Mobile)
   };
   
   const handlePressEnd = () => { if (pressTimer.current) clearTimeout(pressTimer.current); };
@@ -214,7 +244,7 @@ export default function ProjectChat({
   };
   
   const handleReact = async (msgId: string, emoji: string) => {
-    try { await api.post(`/projects/messages/${msgId}/react`, { emoji }); setReactionMenuId(null); setMenuMsgId(null); } catch { alert('Erreur de réaction'); }
+    try { await api.post(`/projects/messages/${msgId}/react`, { emoji }); setMenuMsgId(null); } catch { alert('Erreur de réaction'); }
   };
 
   const handleCopy = async (msg: Message) => {
@@ -247,14 +277,6 @@ export default function ProjectChat({
       setReplyToMsg(null);
       scrollBottom();
     } catch { alert("Erreur d'envoi"); } finally { setUploading(false); }
-  };
-
-  const getPreviewText = (msg: string) => {
-    if (msg.startsWith('[AUDIO]')) return '🎤 Message vocal';
-    if (msg.startsWith('[IMAGE]')) return '📷 Image';
-    if (msg.startsWith('[FILE]')) return '📎 ' + (msg.split('|')[1] || 'Document');
-    if (msg.startsWith('[TRANSFERT]')) return '🔄 Message transféré';
-    return msg;
   };
 
   const renderTextWithMentions = (text: string) => {
@@ -346,7 +368,7 @@ export default function ProjectChat({
                     >
                       {/* Reply Overlay */}
                       {m.replyTo && !m.isDeleted && (
-                        <div onClick={() => document.getElementById(`pmsg-${m.replyTo!.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })} className="mb-1.5 p-2 bg-black/20 border-l-4 border-[#4FC3F7] rounded text-xs cursor-pointer">
+                        <div onClick={() => document.getElementById(`pmsg-${m.replyTo!.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })} className="mb-1.5 p-2 bg-black/20 border-l-4 border-[#4FC3F7] rounded text-xs cursor-pointer hover:bg-black/30 transition">
                           <div className="font-bold text-[#4FC3F7] mb-0.5">{m.replyTo.nom}</div>
                           <div className="truncate text-white/70">{m.replyTo.preview}</div>
                         </div>
@@ -361,11 +383,12 @@ export default function ProjectChat({
                         {new Date(m.creeLe).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                       </div>
 
-                      {/* CHEVRON & REACTIONS ACTION (Apparaît au survol, style WhatsApp) */}
+                      {/* CHEVRON ACTION (Apparaît au survol sur Desktop, style WhatsApp) */}
                       {!m.isDeleted && (
-                        <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-md rounded-lg p-0.5 flex items-center gap-1 z-10 border border-white/10">
-                          <button onClick={() => { setReactionMenuId(reactionMenuId === m.id ? null : m.id); setMenuMsgId(null); }} className="p-1 text-white/70 hover:text-white" title="Réagir"><SmilePlus size={14}/></button>
-                          <button onClick={() => { setMenuMsgId(menuMsgId === m.id ? null : m.id); setReactionMenuId(null); }} className="p-1 text-white/70 hover:text-white" title="Options"><ChevronDown size={16}/></button>
+                        <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-md rounded-lg p-0.5 flex items-center z-10 border border-white/10 hidden sm:flex">
+                          <button onClick={() => setMenuMsgId(menuMsgId === m.id ? null : m.id)} className="p-1 text-white/70 hover:text-white" title="Options & Réactions">
+                            <ChevronDown size={16}/>
+                          </button>
                         </div>
                       )}
                     </div>
@@ -384,18 +407,20 @@ export default function ProjectChat({
                       </div>
                     )}
 
-                    {/* MENU DE REACTIONS (Popup) */}
-                    {reactionMenuId === m.id && (
-                      <div className={`absolute z-40 ${isMe ? 'right-0' : 'left-0'} -top-10 bg-[#07192f] border border-[#1E4D8C] p-1.5 rounded-full shadow-2xl flex gap-1`}>
-                        {['👍', '❤️', '😂', '🚀', '👀'].map((e) => (
-                          <button key={e} onClick={() => handleReact(m.id, e)} className="hover:bg-white/10 p-1.5 rounded-full text-lg hover:scale-125 transition-transform">{e}</button>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* MENU D'OPTIONS DU MESSAGE (Popup Chevron) */}
+                    {/* MENU UNIFIÉ : RÉACTIONS + OPTIONS (Popup Chevron / Appui Long) */}
                     {menuMsgId === m.id && (
-                      <div className={`absolute z-30 top-6 ${isMe ? 'right-0' : 'left-0'} bg-[#0A2540] border border-[#1E4D8C] p-1.5 min-w-[140px] rounded-lg shadow-xl`}>
+                      <div className={`absolute z-40 top-6 ${isMe ? 'right-0' : 'left-0'} bg-[#0A2540] border border-[#1E4D8C] p-1.5 min-w-[160px] rounded-lg shadow-2xl`}>
+                        
+                        {/* Barre de Réactions Rapides */}
+                        {!m.isDeleted && (
+                          <div className="flex justify-between items-center mb-1.5 border-b border-[#1E4D8C] pb-1.5 px-1">
+                            {['👍', '❤️', '😂', '🚀', '👀'].map((e) => (
+                              <button key={e} onClick={() => handleReact(m.id, e)} className="hover:bg-white/10 p-1.5 rounded-full text-base hover:scale-125 transition-transform">{e}</button>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Options du message */}
                         {!m.isDeleted && (
                           <>
                             <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white hover:bg-[#1E4D8C] rounded transition" onClick={() => { setReplyToMsg(m); setMenuMsgId(null); focusComposer(); }}><Reply size={14} /> Répondre</button>
@@ -405,14 +430,16 @@ export default function ProjectChat({
                             {isMe && !m.message.startsWith('[') && <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white hover:bg-[#1E4D8C] rounded transition" onClick={() => handleEdit(m)}><Edit2 size={14} /> Modifier</button>}
                           </>
                         )}
-                        {isMe && !m.isDeleted && <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-400 hover:bg-red-500/20 rounded transition" onClick={() => handleDelete(m.id)}><Trash2 size={14} /> Supprimer</button>}
+                        {isMe && !m.isDeleted && (
+                          <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-400 hover:bg-red-500/20 rounded transition" onClick={() => handleDelete(m.id)}><Trash2 size={14} /> Supprimer</button>
+                        )}
                       </div>
                     )}
                   </div>
                 </div>
               );
             })}
-            <div ref={endRef} />
+            <div ref={endRef} className="h-8" /> {/* Espace pour empêcher le popup d'être coupé à la fin */}
           </div>
 
           {/* 🔴 BOUTON SCROLL BOTTOM AVEC BADGE (WhatsApp style) */}
@@ -425,7 +452,7 @@ export default function ProjectChat({
             >
               <ChevronsDown size={20} />
               {unreadScrollCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 bg-emerald-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] rounded-full flex items-center justify-center animate-bounce">
+                <span className="absolute -top-1.5 -right-1.5 bg-emerald-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] rounded-full flex items-center justify-center animate-bounce shadow-md border border-[#0A2540]">
                   {unreadScrollCount > 99 ? '99+' : unreadScrollCount}
                 </span>
               )}
@@ -435,7 +462,7 @@ export default function ProjectChat({
           {/* ZONE DE SAISIE */}
           <div className="bg-[#07192f] border-t border-[#1E4D8C] flex flex-col z-30 relative">
             {showMentions && filteredMembers.length > 0 && (
-              <div className="absolute bottom-full left-0 right-0 bg-[#0A2540] border-t border-[#1E4D8C] max-h-32 overflow-y-auto z-40 shadow-xl">
+              <div className="absolute bottom-full left-0 right-0 bg-[#0A2540] border-t border-[#1E4D8C] max-h-32 overflow-y-auto z-40 shadow-xl custom-scrollbar">
                 {filteredMembers.map((m) => (
                   <button key={m.id} type="button" onClick={() => handleMentionClick(m.user.nom)} className="w-full text-left px-4 py-2 border-b border-[#1E4D8C] hover:bg-[#1E4D8C]/50 text-sm text-white flex items-center gap-2">
                     <div className="w-6 h-6 rounded-full bg-[#1E4D8C] text-[#4FC3F7] flex items-center justify-center text-xs font-bold">{m.user.nom.charAt(0)}</div>
@@ -446,16 +473,16 @@ export default function ProjectChat({
             )}
 
             {(replyToMsg || editingMsgId) && (
-              <div className="px-4 py-2 bg-black/20 flex justify-between items-center text-xs border-b border-[#1E4D8C]">
-                <div className="flex-1 min-w-0 border-l-2 border-[#4FC3F7] pl-2">
+              <div className="px-4 py-2 bg-black/30 flex justify-between items-center text-xs border-b border-[#1E4D8C]">
+                <div className="flex-1 min-w-0 border-l-4 border-[#4FC3F7] pl-2">
                   <div className="text-[#4FC3F7] font-bold">{editingMsgId ? 'Modification' : `Réponse à ${replyToMsg?.user.nom}`}</div>
-                  <div className="text-white/50 truncate">{editingMsgId ? 'Modifiez votre message' : getPreviewText(replyToMsg?.message || '')}</div>
+                  <div className="text-white/60 truncate">{editingMsgId ? 'Modifiez votre message' : getPreviewText(replyToMsg?.message || '')}</div>
                 </div>
-                <button type="button" onClick={() => { setReplyToMsg(null); setEditingMsgId(null); setTexte(''); }} className="text-white/40 hover:text-white p-1"><X size={16}/></button>
+                <button type="button" onClick={() => { setReplyToMsg(null); setEditingMsgId(null); setTexte(''); }} className="text-white/40 hover:text-white p-1 ml-2 bg-white/5 rounded-full"><X size={16}/></button>
               </div>
             )}
 
-            <div className="px-3 pt-1 text-[10px] h-3 text-[#4FC3F7] italic">
+            <div className="px-3 pt-1 text-[10px] h-4 text-[#4FC3F7] italic">
               {typingUsers.length > 0 ? `${typingUsers.join(', ')} écrit...` : ''}
             </div>
 
@@ -483,11 +510,11 @@ export default function ProjectChat({
 
               <div className="shrink-0 mb-0.5 ml-1">
                 {texte || isRecording ? (
-                  <button type="button" onClick={isRecording ? handleStopRecording : () => envoyerTexte()} disabled={uploading} className="bg-[#4FC3F7] text-[#0A2540] rounded-full w-11 h-11 flex items-center justify-center shadow-lg">
+                  <button type="button" onClick={isRecording ? handleStopRecording : () => envoyerTexte()} disabled={uploading} className="bg-[#4FC3F7] text-[#0A2540] rounded-full w-11 h-11 flex items-center justify-center shadow-lg hover:scale-105 transition-transform">
                     <Send size={18} className="ml-0.5" />
                   </button>
                 ) : (
-                  <button type="button" onClick={startRecording} disabled={uploading} className="bg-[#1E4D8C] text-white hover:text-[#4FC3F7] border border-[#1E4D8C] rounded-full w-11 h-11 flex items-center justify-center shadow-lg">
+                  <button type="button" onClick={startRecording} disabled={uploading} className="bg-[#1E4D8C] text-white hover:text-[#4FC3F7] border border-[#1E4D8C] rounded-full w-11 h-11 flex items-center justify-center shadow-lg hover:scale-105 transition-transform">
                     <Mic size={20} />
                   </button>
                 )}
@@ -502,11 +529,11 @@ export default function ProjectChat({
         <div className="fixed inset-0 bg-black/70 z-[70] flex items-center justify-center p-4">
           <div className="bg-[#0A2540] w-full max-w-xs p-5 rounded-2xl space-y-3 border border-[#1E4D8C] shadow-2xl">
             <h3 className="font-bold text-white text-sm">Transférer à...</h3>
-            <button className="w-full text-left px-4 py-3 bg-[#1E4D8C]/30 hover:bg-[#1E4D8C] border border-[#1E4D8C] rounded-xl text-sm text-white" onClick={() => handleForward('channel', 'global', '#Général')}>🌍 Chat Général</button>
+            <button className="w-full text-left px-4 py-3 bg-[#1E4D8C]/30 hover:bg-[#1E4D8C] border border-[#1E4D8C] rounded-xl text-sm text-white transition" onClick={() => handleForward('channel', 'global', '#Général')}>🌍 Chat Général</button>
             {myProjects.map((p) => (
-              <button key={p.id} className="w-full text-left px-4 py-3 bg-[#1E4D8C]/30 hover:bg-[#1E4D8C] border border-[#1E4D8C] rounded-xl text-sm text-white" onClick={() => handleForward('project', p.id, p.nom)}>📁 {p.nom}</button>
+              <button key={p.id} className="w-full text-left px-4 py-3 bg-[#1E4D8C]/30 hover:bg-[#1E4D8C] border border-[#1E4D8C] rounded-xl text-sm text-white transition" onClick={() => handleForward('project', p.id, p.nom)}>📁 {p.nom}</button>
             ))}
-            <button onClick={() => setForwardMessage(null)} className="w-full py-2 text-white/50 text-sm mt-2 uppercase font-bold text-[10px]">Annuler</button>
+            <button onClick={() => setForwardMessage(null)} className="w-full py-2 text-white/50 hover:text-white transition text-sm mt-2 uppercase font-bold text-[10px]">Annuler</button>
           </div>
         </div>
       )}

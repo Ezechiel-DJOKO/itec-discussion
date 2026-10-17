@@ -140,7 +140,7 @@ function TaskFilesSection({ task, userId, isChef, canUpload }: { task: Task; use
   );
 }
 
-// ── COMPOSANT 2 : README DE LA TÂCHE (avec support d'API PATCH & PUT) ──
+// ── COMPOSANT 2 : README DE LA TÂCHE (rempli par l'assigné, sous Fichiers) ──
 function TaskAssigneeReadme({ task, canEdit, onUpdated }: { task: Task; canEdit: boolean; onUpdated: (t: Task) => void }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -152,24 +152,11 @@ function TaskAssigneeReadme({ task, canEdit, onUpdated }: { task: Task; canEdit:
   const handleSave = async () => {
     setSaving(true);
     try {
-      let res;
-      try {
-        res = await api.patch(`/tasks/${task.id}`, { readme: text });
-      } catch (err: any) {
-        if (err.response?.status === 404 || err.response?.status === 405) {
-          res = await api.put(`/tasks/${task.id}`, { readme: text });
-        } else {
-          throw err;
-        }
-      }
+      const res = await api.patch(`/tasks/${task.id}`, { readme: text });
       onUpdated(res.data);
       setEditing(false);
-    } catch (err: any) {
-      console.error('Erreur lors de la sauvegarde du readme:', err);
-      const message = Array.isArray(err.response?.data?.message) 
-        ? err.response?.data?.message.join(', ') 
-        : err.response?.data?.message || err.message || 'Erreur inconnue';
-      alert(`Erreur lors de la sauvegarde : ${message}`);
+    } catch {
+      alert('Erreur lors de la sauvegarde du readme');
     } finally {
       setSaving(false);
     }
@@ -419,7 +406,7 @@ function ProjectDetailContent() {
                 {taskErreur && <div className="text-sm text-red-300 bg-red-500/20 px-4 py-3 rounded-xl border border-red-500/30">{taskErreur}</div>}
                 
                 <input type="text" placeholder="Titre de la tâche *" value={taskForm.titre} onChange={(e) => setTaskForm({ ...taskForm, titre: e.target.value })} required className="w-full bg-[#1E4D8C]/30 border border-[#1E4D8C] px-4 py-3 rounded-xl text-white focus:outline-none focus:border-[#4FC3F7]" />
-                <textarea placeholder="Détails / consignes de la tâche..." value={taskForm.description} onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })} rows={4} className="w-full bg-[#1E4D8C]/30 border border-[#1E4D8C] px-4 py-3 rounded-xl resize-none text-white focus:outline-none focus:border-[#4FC3F7]" />
+                <textarea placeholder="Description / détails de la tâche..." value={taskForm.description} onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })} rows={4} className="w-full bg-[#1E4D8C]/30 border border-[#1E4D8C] px-4 py-3 rounded-xl resize-none text-white focus:outline-none focus:border-[#4FC3F7]" />
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
@@ -560,7 +547,7 @@ function ProjectDetailContent() {
                           canUpload={canUpload(task)} 
                         />
 
-                        {/* README DE LA TÂCHE */}
+                        {/* README DE LA TÂCHE (placé juste sous les Fichiers, rempli par l'assigné) */}
                         <TaskAssigneeReadme 
                           task={task} 
                           canEdit={canUpload(task)} 

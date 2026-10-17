@@ -41,18 +41,12 @@ export class TasksService {
     }
   }
 
-  /** Notifie une liste d'users (sauf l'auteur) */
-  private async notifyUsers(
-    userIds: string[],
-    message: string,
-    exceptUserId?: string,
-  ) {
+  private async notifyUsers(userIds: string[], message: string, exceptUserId?: string) {
     const unique = [...new Set(userIds.filter((id) => id && id !== exceptUserId))];
     for (const uid of unique) {
       try {
         await this.notifService.create(uid, message);
       } catch (e) {
-        // on n'bloque pas la tâche si une notif échoue
         console.error('Notif error', uid, e);
       }
     }
@@ -83,7 +77,6 @@ export class TasksService {
 
     const saved = await this.taskRepo.save(task);
 
-    // 🔔 Notif : tâche assignée
     if (assignes.length > 0) {
       await this.notifyUsers(
         assignes.map((a) => a.id),
@@ -140,7 +133,6 @@ export class TasksService {
     const refreshed = await this.findOne(taskId, userId);
     const newAssigneeIds = (refreshed.assignes || []).map((a) => a.id);
 
-    // Nouveaux assignés uniquement
     if (dto.assignesIds) {
       const newlyAssigned = newAssigneeIds.filter((id) => !oldAssigneeIds.includes(id));
       await this.notifyUsers(
@@ -150,7 +142,6 @@ export class TasksService {
       );
     }
 
-    // Changement de statut via update général
     if (dto.statut) {
       await this.notifyUsers(
         newAssigneeIds,
@@ -160,6 +151,24 @@ export class TasksService {
     }
 
     return refreshed;
+  }
+
+  // NOUVEAU : Sauvegarde isolée du Readme (Autorise le collaborateur assigné)
+  async updateReadme(taskId: string, readme: string, userId: string): Promise<Task> {
+    const task = await this.findOne(taskId, userId);
+    const membership = await this.getMembership(task.projectId, userId);
+
+    const isChef = membership.role === MemberRole.CHEF;
+    const isAssignee = task.assignes?.some((a) => a.id === userId);
+
+    if (!isChef && !isAssignee) {
+      throw new ForbiddenException(
+        'Seul le collaborateur assigné ou le chef peut modifier le compte-rendu',
+      );
+    }
+
+    task.readme = readme;
+    return await this.taskRepo.save(task);
   }
 
   async updateStatut(taskId: string, statut: TaskStatut, userId: string): Promise<Task> {
@@ -176,7 +185,7 @@ export class TasksService {
     }
 
     const actor = await this.userRepo.findOne({ where: { id: userId } });
-    const actorName = actor?.nom || 'Quelqu\'un';
+    const actorName = actor?.nom || "Quelqu'un";
     const oldStatut = task.statut;
 
     task.statut = statut;
@@ -187,7 +196,6 @@ export class TasksService {
       nouveauStatut: statut,
     });
 
-    // 🔔 Notifier les autres assignés + le chef
     const assigneeIds = (task.assignes || []).map((a) => a.id);
     const chef = await this.memberRepo.findOne({
       where: { projectId: task.projectId, role: MemberRole.CHEF },

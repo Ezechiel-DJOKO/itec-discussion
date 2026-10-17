@@ -15,8 +15,8 @@ import { UsersModule } from '../users/users.module.js';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.get('JWT_SECRET'),
-        signOptions: { expiresIn: config.get('JWT_EXPIRATION') },
+        secret: config.get('JWT_SECRET') || 'secret_key_itec_fallback_2025',
+        signOptions: { expiresIn: config.get('JWT_EXPIRATION') || '7d' },
       }),
     }),
   ],

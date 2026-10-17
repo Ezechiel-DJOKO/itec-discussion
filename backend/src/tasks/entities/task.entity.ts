@@ -56,14 +56,12 @@ export class Task {
   @Column({ type: 'date' })
   dateLimite: string;
 
-  // Date limite initiale (pour tracer les surplus plus tard)
   @Column({ type: 'date' })
   dateLimiteInitiale: string;
 
   @Column({ type: 'int', default: 0 })
   joursSurplus: number;
 
-  // Projet parent
   @ManyToOne('Project', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'project_id' })
   project: Project;
@@ -71,7 +69,6 @@ export class Task {
   @Column({ name: 'project_id' })
   projectId: string;
 
-  // Responsable assigné
   @ManyToMany(() => User, { eager: true })
   @JoinTable({
     name: 'task_assignees',
@@ -80,7 +77,6 @@ export class Task {
   })
   assignes: User[];
 
-  // Qui a créé la tâche
   @ManyToOne(() => User, { eager: true })
   @JoinColumn({ name: 'created_by' })
   createur: User;
@@ -93,9 +89,4 @@ export class Task {
 
   @UpdateDateColumn()
   modifieLe: Date;
-
-  
-  
 }
-
- 
