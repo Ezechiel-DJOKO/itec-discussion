@@ -69,24 +69,43 @@ export function useGlobalNotifications(user: User | null) {
     } catch {}
   }, []);
 
-  const triggerPushNotification = useCallback((title: string, body: string) => {
+    const triggerPushNotification = useCallback(async (title: string, body: string) => {
     if (typeof window === 'undefined' || !('Notification' in window)) return;
     if (Notification.permission !== 'granted') return;
-    
+
+    const options = {
+      body,
+      icon: '/logo.jpg',
+      badge: '/logo.jpg',
+      tag: 'itec-chat',
+      renotify: true,
+      vibrate: [200, 100, 200], // Vibration sur téléphone
+      data: { url: window.location.href },
+    } as any;
+
     try {
-      const n = new Notification(title, {
-        body,
-        icon: '/logo.jpg',
-        badge: '/logo.jpg',
-        tag: 'itec-chat',
-        renotify: true,
-      } as any); 
-      
+      // 1. PRIORITÉ MOBILE : Utiliser le Service Worker s'il est disponible
+      if ('serviceWorker' in navigator) {
+        const reg = await navigator.serviceWorker.ready;
+        if (reg && reg.showNotification) {
+          await reg.showNotification(title, options);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('Erreur Service Worker notification:', err);
+    }
+
+    // 2. FALLBACK PC DESKTOP : Si le Service Worker n'est pas dispo
+    try {
+      const n = new Notification(title, options);
       n.onclick = () => {
         window.focus();
         n.close();
       };
-    } catch {}
+    } catch (e) {
+      console.warn('Erreur Desktop notification:', e);
+    }
   }, []);
 
   const requestPushPermission = async () => {
