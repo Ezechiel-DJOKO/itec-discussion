@@ -1,29 +1,51 @@
 import { io, Socket } from 'socket.io-client';
+import Cookies from 'js-cookie';
 
 let socket: Socket | null = null;
 
-export function getSocket(): Socket {
+export const getSocket = (userId?: string): Socket => {
+  const URL =
+    process.env.NEXT_PUBLIC_SOCKET_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    'http://localhost:3001';
+
+  const token =
+    typeof window !== 'undefined'
+      ? localStorage.getItem('token') || Cookies.get('token') || ''
+      : '';
+
   if (!socket) {
-    const url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-
-    let userId: string | undefined;
-    if (typeof window !== 'undefined') {
-      try {
-        const u = localStorage.getItem('user');
-        if (u) userId = JSON.parse(u)?.id;
-      } catch {}
-    }
-
-    socket = io(url, {
+    socket = io(URL, {
+      auth: { token, userId: userId || '' },
+      query: { userId: userId || '' },
       transports: ['websocket', 'polling'],
-      autoConnect: true,
+      autoConnect: !!token,
       reconnection: true,
-      reconnectionAttempts: 15,
+      reconnectionAttempts: 20,
       reconnectionDelay: 1000,
-      auth: { userId },
-      query: { userId },
-      withCredentials: true,
     });
+  } else {
+    const auth = (socket.auth || {}) as any;
+    const tokenChanged = auth.token !== token;
+    const userChanged = userId && auth.userId !== userId;
+
+    if (tokenChanged || userChanged) {
+      socket.auth = { token, userId: userId || auth.userId || '' };
+      (socket.io as any).opts.query = { userId: userId || auth.userId || '' };
+      if (socket.connected) socket.disconnect();
+      if (token) socket.connect();
+    } else if (token && !socket.connected) {
+      socket.connect();
+    }
   }
+
   return socket;
-}
+};
+
+/** À appeler au logout */
+export const disconnectSocket = () => {
+  if (socket) {
+    socket.disconnect();
+    socket = null;
+  }
+};

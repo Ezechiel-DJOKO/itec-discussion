@@ -10,9 +10,10 @@ import {
   FolderPlus, Activity, CheckCircle, Clock, ShieldAlert, 
   UserCircle, Plus, X 
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 export default function DashboardPage() {
-  const { user, loading: authLoading } = useAuth();
+  
   const [projects, setProjects] = useState<Project[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -29,6 +30,9 @@ export default function DashboardPage() {
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState('');
 
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
+
     // Vérification de sécurité frontend (matche le backend)
   const u = user as any;
   const isResponsableOrAdmin = 
@@ -39,20 +43,29 @@ export default function DashboardPage() {
     u?.role === 'responsable' || 
     u?.isResponsable === true;
 
-  useEffect(() => {
-    if (!authLoading) {
+    useEffect(() => {
+    // Si la vérification auth est terminée et qu'aucun utilisateur n'est connecté -> Go /login
+    if (!authLoading && !user) {
+      router.push('/login');
+      return;
+    }
+
+    // Si l'utilisateur est bien connecté -> Charger les projets
+    if (!authLoading && user) {
       Promise.all([
         api.get('/projects'),
-        api.get('/users/me/stats')
+        api.get('/users/me/stats').catch(() => ({ data: null })),
       ])
         .then(([projRes, statsRes]) => {
-          setProjects(projRes.data);
-          setStats(statsRes.data);
+          setProjects(projRes.data || []);
+          if (statsRes?.data) setStats(statsRes.data);
         })
-        .catch(console.error)
+        .catch((err) => {
+          console.error("Erreur lors du chargement du dashboard:", err);
+        })
         .finally(() => setLoading(false));
     }
-  }, [authLoading]);
+  }, [user, authLoading, router]);
 
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();

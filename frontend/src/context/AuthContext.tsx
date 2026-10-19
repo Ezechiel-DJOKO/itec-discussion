@@ -3,14 +3,17 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import Cookies from 'js-cookie';
 import api from '@/lib/api';
+import { disconnectSocket } from '@/lib/socket';
 
 interface User {
   id: string;
   nom: string;
   email: string;
   avatar?: string;
-  isSuperAdmin: boolean; // 👈 NOUVEAU
-  permissions: string[]; // 👈 NOUVEAU
+  role?: string;
+  isSuperAdmin: boolean;
+  permissions: string[];
+  sub?: string;
 }
 
 interface AuthContextType {
@@ -27,14 +30,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Vérifier si l'utilisateur est déjà connecté au chargement
+  // Vérification de la session au démarrage
   useEffect(() => {
-    const token = Cookies.get('token');
+    const token = Cookies.get('token') || (typeof window !== 'undefined' ? localStorage.getItem('token') : null);
+    
     if (token) {
+      // Synchronisation des 2 stockages
+      Cookies.set('token', token, { expires: 7 });
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('token', token);
+      }
+
       api
         .get('/users/me')
         .then((res) => setUser(res.data))
-        .catch(() => Cookies.remove('token'))
+        .catch(() => {
+          Cookies.remove('token');
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('token');
+          }
+        })
         .finally(() => setLoading(false));
     } else {
       setLoading(false);
@@ -43,18 +58,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, motDePasse: string) => {
     const res = await api.post('/auth/login', { email, motDePasse });
-    Cookies.set('token', res.data.token, { expires: 7 });
+    const token = res.data.token;
+
+    Cookies.set('token', token, { expires: 7 });
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('token', token);
+    }
+    
     setUser(res.data.utilisateur);
   };
 
   const register = async (nom: string, email: string, motDePasse: string) => {
     const res = await api.post('/auth/register', { nom, email, motDePasse });
-    Cookies.set('token', res.data.token, { expires: 7 });
+    const token = res.data.token;
+
+    Cookies.set('token', token, { expires: 7 });
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('token', token);
+    }
+
     setUser(res.data.utilisateur);
   };
 
   const logout = () => {
+    // 1. Déconnexion explicite du Socket.io
+    disconnectSocket();
+
+    // 2. Nettoyage des jetons
     Cookies.remove('token');
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('token');
+    }
+
     setUser(null);
     window.location.href = '/login';
   };

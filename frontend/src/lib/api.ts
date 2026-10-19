@@ -14,4 +14,19 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+api.interceptors.response.use(
+  (res) => res,
+  (error) => {
+    if (error?.response?.status === 401 && typeof window !== 'undefined') {
+      const isLoginPage = window.location.pathname.startsWith('/login');
+      // Ne redirige pas si on est déjà sur /login (évite boucle + spam console)
+      if (!isLoginPage) {
+        Cookies.remove('token');
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  },
+);
+
 export default api;

@@ -1,41 +1,22 @@
 'use client';
 
-import React, { createContext, useContext, useState } from 'react';
-import { Notification } from '@/types';
+import React, { createContext, useContext } from 'react';
+import { useAuth } from './AuthContext';
+import { useGlobalNotifications } from '@/hooks/useGlobalNotifications';
 
-interface NotificationContextType {
-  notifications: Notification[];
-  unreadNotifsCount: number;
-  unreadChats: Record<string, number>;
-  totalUnreadChats: number;
-  marquerCommeLue: (id: string) => Promise<void>;
-  marquerToutCommeLue: () => Promise<void>;
-  resetChatUnread: (channelId: string) => void;
-  refreshNotifications: () => Promise<void>;
-  playNotificationSound: () => void;
-  getProjectUnread: (projectId: string) => number;
-}
+// On récupère le type de retour exact de notre hook
+type NotificationContextType = ReturnType<typeof useGlobalNotifications>;
 
 const NotificationContext = createContext<NotificationContextType>({} as NotificationContextType);
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
-  const [notifications] = useState<Notification[]>([]);
+  const { user } = useAuth();
+  
+  // TOUTE la logique est maintenant encapsulée ici de manière propre
+  const notificationState = useGlobalNotifications(user);
 
   return (
-    <NotificationContext.Provider
-      value={{
-        notifications,
-        unreadNotifsCount: 0,
-        unreadChats: {},
-        totalUnreadChats: 0,
-        marquerCommeLue: async () => {},
-        marquerToutCommeLue: async () => {},
-        resetChatUnread: () => {},
-        refreshNotifications: async () => {},
-        playNotificationSound: () => {},
-        getProjectUnread: () => 0,
-      }}
-    >
+    <NotificationContext.Provider value={notificationState}>
       {children}
     </NotificationContext.Provider>
   );

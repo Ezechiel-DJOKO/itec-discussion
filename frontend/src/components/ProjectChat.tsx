@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import api from '@/lib/api';
 import Cookies from 'js-cookie';
 import { User } from '@/types';
 import {
   MessageSquare, X, Send, Mic, Image as ImageIcon, Paperclip, Download,
-  Edit2, Trash2, Copy, Forward, Reply, ChevronDown, ChevronsDown, Trash, Pin, SmilePlus
+  Edit2, Trash2, Copy, Forward, Reply, ChevronDown, ChevronsDown, Trash, Pin
 } from 'lucide-react';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { getSocket } from '@/lib/socket';
@@ -33,8 +33,7 @@ export default function ProjectChat({
   projectName?: string;
 }) {
   const { getProjectUnread, resetChatUnread } = useNotifications();
-  const projectUnread = getProjectUnread(projectId);
-
+  
   const [messages, setMessages] = useState<Message[]>([]);
   const [texte, setTexte] = useState('');
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
@@ -45,10 +44,12 @@ export default function ProjectChat({
   const [myProjects, setMyProjects] = useState<any[]>([]);
   const [uploading, setUploading] = useState(false);
   
-  // États de scroll
+  const [localUnread, setLocalUnread] = useState(0);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [unreadScrollCount, setUnreadScrollCount] = useState(0);
+  
   const showScrollBtnRef = useRef(false);
+  const openRef = useRef(open);
 
   const [showMentions, setShowMentions] = useState(false);
   const [filteredMembers, setFilteredMembers] = useState<any[]>([]);
@@ -65,17 +66,16 @@ export default function ProjectChat({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const pressTimer = useRef<NodeJS.Timeout | null>(null);
 
-  const scrollBottom = () => {
+  const scrollBottom = useCallback(() => {
     setTimeout(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), 80);
     setShowScrollBtn(false);
     setUnreadScrollCount(0);
-  };
+  }, []);
   
   const focusComposer = () => setTimeout(() => { inputRef.current?.focus(); inputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 60);
 
   const pinnedMsg = [...messages].reverse().find((m) => m.isPinned && !m.isDeleted);
 
-  // Fonction utilitaire de prévisualisation hissée pour être utilisée partout
   const getPreviewText = (msg: string) => {
     if (!msg) return '';
     if (msg.startsWith('[AUDIO]')) return '🎤 Message vocal';
@@ -85,9 +85,8 @@ export default function ProjectChat({
     return msg;
   };
 
-  useEffect(() => {
-    showScrollBtnRef.current = showScrollBtn;
-  }, [showScrollBtn]);
+  useEffect(() => { showScrollBtnRef.current = showScrollBtn; }, [showScrollBtn]);
+  useEffect(() => { openRef.current = open; }, [open]);
 
   useEffect(() => {
     let interval: any;
@@ -98,55 +97,72 @@ export default function ProjectChat({
 
   const handleOpen = (value: boolean) => {
     setOpen(value);
-    if (typeof window !== 'undefined' && (window as any).__setOpenProjectChat) {
-      (window as any).__setOpenProjectChat(value ? projectId : null);
+    if (typeof window !== 'undefined') {
+      (window as any).__setOpenProjectChatId = value ? projectId : null;
     }
     if (value) {
+      setLocalUnread(0);
       resetChatUnread(projectId);
       setUnreadScrollCount(0);
+      scrollBottom();
     }
   };
 
   const formatChrono = (secs: number) =>
-  `${Math.floor(secs / 60).toString().padStart(2, '0')}:${(secs % 60).toString().padStart(2, '0')}`;
+    `${Math.floor(secs / 60).toString().padStart(2, '0')}:${(secs % 60).toString().padStart(2, '0')}`;
 
-  // Gestion du retour au focus de l'onglet
   useEffect(() => {
     const handleFocus = () => {
-      if (open && projectId) resetChatUnread(projectId);
+      if (open && projectId) {
+        resetChatUnread(projectId);
+        setLocalUnread(0);
+      }
     };
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
   }, [open, projectId, resetChatUnread]);
 
   useEffect(() => {
-    if (!open || !projectId) return;
+    if (!projectId || !currentUser) return;
 
-    resetChatUnread(projectId);
-    api.get(`/projects/${projectId}/messages`).then((res) => { setMessages(res.data); scrollBottom(); });
+    let cancelled = false;
 
-    const socket = getSocket();
+    // Récupération des messages
+    api.get(`/projects/${projectId}/messages`)
+       .then((res) => { 
+         if (cancelled) return;
+         setMessages(res.data); 
+         if (openRef.current) scrollBottom(); 
+       })
+       .catch((err) => {
+         // Masque l'erreur silencieusement en cas de non autorisation/403 afin d'éviter la pollution console
+         if (err?.response?.status !== 401 && err?.response?.status !== 403) {
+           console.error("Erreur chargement messages projet:", err);
+         }
+       });
+
+    const socket = getSocket(currentUser.id);
+
     const onNew = (newMsg: Message) => {
       setMessages((prev) => { if (prev.some((m) => m.id === newMsg.id)) return prev; return [...prev, newMsg]; });
       
-      // Notification Push native si l'utilisateur n'est pas sur la page
-      if (!document.hasFocus() && newMsg.userId !== currentUser?.id) {
-        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-          new Notification(`💬 ${projectName || 'Projet'} - ${newMsg.user?.nom || 'Équipe'}`, {
-            body: getPreviewText(newMsg.message),
-            icon: '/favicon.ico'
-          });
+      if (newMsg.userId !== currentUser?.id) {
+        if (!openRef.current) {
+          setLocalUnread((prev) => prev + 1);
         }
       }
 
-      if (showScrollBtnRef.current) {
-        setUnreadScrollCount((c) => c + 1);
-      } else {
-        scrollBottom();
+      if (openRef.current) {
+        if (showScrollBtnRef.current) {
+          setUnreadScrollCount((c) => c + 1);
+        } else {
+          scrollBottom();
+        }
       }
     };
 
     const onUpdate = (updated: Message) => setMessages((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
+    
     const onTyping = ({ userName, isTyping }: { userName: string; isTyping: boolean }) => {
       if (userName === currentUser?.nom) return;
       setTypingUsers((prev) => {
@@ -161,14 +177,15 @@ export default function ProjectChat({
     socket.on(`project_${projectId}_typing`, onTyping);
 
     return () => {
+      cancelled = true;
       socket.off(`project_${projectId}_message`, onNew);
       socket.off(`project_${projectId}_message_update`, onUpdate);
       socket.off(`project_${projectId}_typing`, onTyping);
-      if (typeof window !== 'undefined' && (window as any).__setOpenProjectChat) {
-        (window as any).__setOpenProjectChat(null);
+      if (typeof window !== 'undefined') {
+        (window as any).__setOpenProjectChatId = null;
       }
     };
-  }, [open, projectId, projectName, currentUser]);
+  }, [projectId, projectName, currentUser, scrollBottom]);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const isNotBottom = e.currentTarget.scrollHeight - e.currentTarget.scrollTop - e.currentTarget.clientHeight > 80;
@@ -180,7 +197,7 @@ export default function ProjectChat({
     pressTimer.current = setTimeout(() => {
       if (navigator.vibrate) navigator.vibrate(50);
       setMenuMsgId(id);
-    }, 400); // Déclenche le menu contextuel WhatsApp-like après 400ms (Mobile)
+    }, 400);
   };
   
   const handlePressEnd = () => { if (pressTimer.current) clearTimeout(pressTimer.current); };
@@ -226,7 +243,7 @@ export default function ProjectChat({
       setShowMentions(false);
       scrollBottom();
       getSocket().emit('typing_stop', { room: `project_${projectId}`, userName: currentUser?.nom });
-    } catch { alert('Erreur'); }
+    } catch { alert('Erreur lors de l\'envoi'); }
   };
 
   const handleEdit = (msg: Message) => {
@@ -291,30 +308,42 @@ export default function ProjectChat({
   const parseMessage = (msg: string) => {
     const token = Cookies.get('token');
     const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-    const resolveUrl = (pathUrl: string) => pathUrl.startsWith('http') ? pathUrl : `${baseURL}${pathUrl}?token=${token}`;
+    
+    const resolveUrl = (pathUrl: string) => {
+      if (!pathUrl) return '';
+      if (pathUrl.startsWith('http://') || pathUrl.startsWith('https://')) return pathUrl;
+      const clean = pathUrl.startsWith('/') ? pathUrl : `/${pathUrl}`;
+      return `${baseURL}${clean}?token=${token || ''}`;
+    };
 
     if (msg.startsWith('[TRANSFERT]')) return <div className="space-y-0.5"><div className="text-[9px] uppercase opacity-70 border-l-2 border-white/40 pl-1.5">Transféré</div><div>{parseMessage(msg.replace('[TRANSFERT]', '').trim())}</div></div>;
-    if (msg.startsWith('[AUDIO]')) return <audio controls src={resolveUrl(msg.replace('[AUDIO]', ''))} className="w-48 h-8 rounded outline-none" onPlay={(e) => e.stopPropagation()} />;
-    if (msg.startsWith('[IMAGE]')) return <img src={resolveUrl(msg.replace('[IMAGE]', ''))} alt="Img" className="max-w-[200px] rounded cursor-pointer" onClick={() => window.open(resolveUrl(msg.replace('[IMAGE]', '')), '_blank')} />;
+    
+    if (msg.startsWith('[AUDIO]')) return <audio controls src={resolveUrl(msg.replace('[AUDIO]', ''))} crossOrigin="anonymous" className="w-48 h-8 rounded outline-none" onPlay={(e) => e.stopPropagation()} />;
+    
+    if (msg.startsWith('[IMAGE]')) return <img src={resolveUrl(msg.replace('[IMAGE]', ''))} alt="Img" crossOrigin="anonymous" className="max-w-[200px] rounded cursor-pointer" onClick={() => window.open(resolveUrl(msg.replace('[IMAGE]', '')), '_blank')} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />;
+    
     if (msg.startsWith('[FILE]')) {
       const [pathUrl, fileName] = msg.replace('[FILE]', '').split('|');
-      return <a href={resolveUrl(pathUrl)} download={fileName} target="_blank" className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 px-2 py-1.5 rounded-lg text-white border border-white/10 transition"><Download size={14} /> <span className="text-xs font-bold truncate max-w-[120px]">{fileName || 'Document'}</span></a>;
+      return <a href={resolveUrl(pathUrl)} download={fileName} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 px-2 py-1.5 rounded-lg text-white border border-white/10 transition"><Download size={14} /> <span className="text-xs font-bold truncate max-w-[120px]">{fileName || 'Document'}</span></a>;
     }
     return <span className="whitespace-pre-wrap">{renderTextWithMentions(msg)}</span>;
   };
 
+  // Compteur combiné pour le bouton flottant de ce projet spécifique
+  const displayUnread = Math.max(localUnread, getProjectUnread(projectId) || 0);
+
   return (
     <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[60]">
-      {/* 🔴 BOUTON FLOTTANT PROJET CHAT */}
+      {/* 🔴 BOUTON FLOTTANT PROJET CHAT AVEC PASTILLE ROUGE */}
       {!open && (
         <button
           onClick={() => handleOpen(true)}
           className="relative bg-gradient-to-r from-[#4FC3F7] to-[#1E4D8C] text-white rounded-full w-14 h-14 flex items-center justify-center shadow-[0_0_20px_rgba(79,195,247,0.4)] transition-transform hover:scale-110"
         >
           <MessageSquare size={24} />
-          {projectUnread > 0 && (
+          {displayUnread > 0 && (
             <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[11px] font-bold min-w-[22px] h-[22px] px-1 rounded-full flex items-center justify-center border-2 border-[#0A2540] animate-bounce shadow-lg">
-              {projectUnread > 99 ? '99+' : projectUnread}
+              {displayUnread > 99 ? '99+' : displayUnread}
             </span>
           )}
         </button>
@@ -356,7 +385,6 @@ export default function ProjectChat({
 
                   <div className={`relative max-w-[90%] ${isMe ? 'mr-1' : 'ml-1'}`}>
                     
-                    {/* BUBBLE (Design WhatsApp) */}
                     <div
                       onTouchStart={() => handlePressStart(m.id)} onTouchEnd={handlePressEnd} onTouchMove={handlePressEnd}
                       onMouseDown={() => handlePressStart(m.id)} onMouseUp={handlePressEnd} onMouseLeave={handlePressEnd}
@@ -366,7 +394,6 @@ export default function ProjectChat({
                           : 'bg-[#0F2D4A] border border-[#1E4D8C]/60 text-white rounded-tl-sm'
                       }`}
                     >
-                      {/* Reply Overlay */}
                       {m.replyTo && !m.isDeleted && (
                         <div onClick={() => document.getElementById(`pmsg-${m.replyTo!.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })} className="mb-1.5 p-2 bg-black/20 border-l-4 border-[#4FC3F7] rounded text-xs cursor-pointer hover:bg-black/30 transition">
                           <div className="font-bold text-[#4FC3F7] mb-0.5">{m.replyTo.nom}</div>
@@ -374,16 +401,13 @@ export default function ProjectChat({
                         </div>
                       )}
                       
-                      {/* Content */}
                       {parseMessage(m.message)}
 
-                      {/* Time & Edition Status */}
                       <div className="absolute bottom-1 right-2 flex items-center gap-1 text-[9px] text-white/50">
                         {m.isEdited && !m.isDeleted && <span className="italic">modifié</span>}
                         {new Date(m.creeLe).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                       </div>
 
-                      {/* CHEVRON ACTION (Apparaît au survol sur Desktop, style WhatsApp) */}
                       {!m.isDeleted && (
                         <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-md rounded-lg p-0.5 flex items-center z-10 border border-white/10 hidden sm:flex">
                           <button onClick={() => setMenuMsgId(menuMsgId === m.id ? null : m.id)} className="p-1 text-white/70 hover:text-white" title="Options & Réactions">
@@ -393,7 +417,6 @@ export default function ProjectChat({
                       )}
                     </div>
 
-                    {/* Affichage des réactions enregistrées */}
                     {hasReactions && !m.isDeleted && (
                       <div className={`flex flex-wrap gap-1 mt-1 relative z-0 ${isMe ? 'justify-end' : 'justify-start'}`}>
                         {Object.entries(m.reactions!).map(([emoji, users]) => {
@@ -407,11 +430,8 @@ export default function ProjectChat({
                       </div>
                     )}
 
-                    {/* MENU UNIFIÉ : RÉACTIONS + OPTIONS (Popup Chevron / Appui Long) */}
                     {menuMsgId === m.id && (
                       <div className={`absolute z-40 top-6 ${isMe ? 'right-0' : 'left-0'} bg-[#0A2540] border border-[#1E4D8C] p-1.5 min-w-[160px] rounded-lg shadow-2xl`}>
-                        
-                        {/* Barre de Réactions Rapides */}
                         {!m.isDeleted && (
                           <div className="flex justify-between items-center mb-1.5 border-b border-[#1E4D8C] pb-1.5 px-1">
                             {['👍', '❤️', '😂', '🚀', '👀'].map((e) => (
@@ -419,19 +439,17 @@ export default function ProjectChat({
                             ))}
                           </div>
                         )}
-
-                        {/* Options du message */}
                         {!m.isDeleted && (
                           <>
-                            <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white hover:bg-[#1E4D8C] rounded transition" onClick={() => { setReplyToMsg(m); setMenuMsgId(null); focusComposer(); }}><Reply size={14} /> Répondre</button>
-                            <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white hover:bg-[#1E4D8C] rounded transition" onClick={() => handleCopy(m)}><Copy size={14} /> Copier</button>
-                            <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white hover:bg-[#1E4D8C] rounded transition" onClick={() => { setForwardMessage(m); setMenuMsgId(null); api.get('/projects').then((res) => setMyProjects(res.data)); }}><Forward size={14} /> Transférer</button>
-                            {isChef && <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[#4FC3F7] hover:bg-[#1E4D8C] rounded transition" onClick={() => handlePin(m)}><Pin size={14} /> {m.isPinned ? 'Désépingler' : 'Épingler'}</button>}
-                            {isMe && !m.message.startsWith('[') && <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white hover:bg-[#1E4D8C] rounded transition" onClick={() => handleEdit(m)}><Edit2 size={14} /> Modifier</button>}
+                            <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white hover:bg-[#1E4D8C] rounded transition" onClick={() => { setReplyToMsg(m); setMenuMsgId(null); focusComposer(); }}>Répondre</button>
+                            <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white hover:bg-[#1E4D8C] rounded transition" onClick={() => handleCopy(m)}>Copier</button>
+                            <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white hover:bg-[#1E4D8C] rounded transition" onClick={() => { setForwardMessage(m); setMenuMsgId(null); api.get('/projects').then((res) => setMyProjects(res.data)); }}>Transférer</button>
+                            {isChef && <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[#4FC3F7] hover:bg-[#1E4D8C] rounded transition" onClick={() => handlePin(m)}>{m.isPinned ? 'Désépingler' : 'Épingler'}</button>}
+                            {isMe && !m.message.startsWith('[') && <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white hover:bg-[#1E4D8C] rounded transition" onClick={() => handleEdit(m)}>Modifier</button>}
                           </>
                         )}
                         {isMe && !m.isDeleted && (
-                          <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-400 hover:bg-red-500/20 rounded transition" onClick={() => handleDelete(m.id)}><Trash2 size={14} /> Supprimer</button>
+                          <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-400 hover:bg-red-500/20 rounded transition" onClick={() => handleDelete(m.id)}>Supprimer</button>
                         )}
                       </div>
                     )}
@@ -439,10 +457,10 @@ export default function ProjectChat({
                 </div>
               );
             })}
-            <div ref={endRef} className="h-8" /> {/* Espace pour empêcher le popup d'être coupé à la fin */}
+            <div ref={endRef} className="h-8" />
           </div>
 
-          {/* 🔴 BOUTON SCROLL BOTTOM AVEC BADGE (WhatsApp style) */}
+          {/* BOUTON SCROLL BOTTOM */}
           {showScrollBtn && (
             <button
               type="button"

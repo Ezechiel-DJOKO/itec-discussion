@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import Navbar from '@/components/Navbar';
 import api from '@/lib/api';
@@ -8,7 +8,7 @@ import Cookies from 'js-cookie';
 import { Globe, Lock, Send, Image as ImageIcon, Paperclip, Mic, Download, Copy, Forward, Edit2, Trash2, Reply, ChevronDown, ChevronsDown, Trash, Pin, X } from 'lucide-react';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { getSocket } from '@/lib/socket';
-import { useNotifications } from '@/context/NotificationContext'; // 👈 NOUVEAU IMPORT
+import { useNotifications } from '@/context/NotificationContext';
 
 type ChannelType = 'global' | 'responsables';
 
@@ -21,7 +21,7 @@ interface ChatMessage {
 
 export default function GlobalChatPage() {
   const { user, loading: authLoading } = useAuth();
-  const { resetChatUnread } = useNotifications(); // 👈 NOUVEAU HOOK
+  const { resetChatUnread } = useNotifications();
 
   const [activeChannel, setActiveChannel] = useState<ChannelType>('global');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -37,7 +37,6 @@ export default function GlobalChatPage() {
   const [myProjects, setMyProjects] = useState<any[]>([]);
   const [uploading, setUploading] = useState(false);
   
-  // États WhatsApp Bouton Retour en bas
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [unreadScrollCount, setUnreadScrollCount] = useState(0);
   const showScrollBtnRef = useRef(false);
@@ -59,11 +58,11 @@ export default function GlobalChatPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
-  const scrollBottom = () => {
+  const scrollBottom = useCallback(() => {
     setTimeout(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), 80);
     setShowScrollBtn(false);
     setUnreadScrollCount(0);
-  };
+  }, []);
   
   const focusComposer = () => setTimeout(() => { inputRef.current?.focus(); inputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 60);
 
@@ -91,26 +90,31 @@ export default function GlobalChatPage() {
     if (!canAccessQG && activeChannel === 'responsables') setActiveChannel('global');
   }, [user, activeChannel]);
 
-  useEffect(() => {
-    showScrollBtnRef.current = showScrollBtn;
-  }, [showScrollBtn]);
+  useEffect(() => { showScrollBtnRef.current = showScrollBtn; }, [showScrollBtn]);
 
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading || !user) return;
+
     setLoading(true); setErreur('');
-
-    // 🔔 NOUVEAU : On efface la pastille rouge car l'utilisateur lit le channel
+    
+    // 🔴 Marquer ce canal comme lu et indiquer qu'il est ouvert devant l'utilisateur
     resetChatUnread(activeChannel);
+    if (typeof window !== 'undefined') {
+      (window as any).__setOpenProjectChatId = activeChannel;
+    }
 
     api.get(`/channels/${activeChannel}/messages`).then((res) => {
       setMessages(res.data);
       setTimeout(scrollBottom, 100);
-    }).catch((err) => setErreur(err.response?.data?.message || 'Accès refusé')).finally(() => setLoading(false));
+    }).catch((err) => {
+      if (err?.response?.status !== 401 && err?.response?.status !== 403) {
+        setErreur(err?.response?.data?.message || 'Accès refusé');
+      }
+    }).finally(() => setLoading(false));
 
-    const socket = getSocket();
+    const socket = getSocket(user.id);
     const onNew = (newMsg: ChatMessage) => {
       setMessages((prev) => { if (prev.some((m) => m.id === newMsg.id)) return prev; return [...prev, newMsg]; });
-      
       if (showScrollBtnRef.current) {
         setUnreadScrollCount(prev => prev + 1);
       } else {
@@ -136,17 +140,16 @@ export default function GlobalChatPage() {
       socket.off(`channel_${activeChannel}_message`, onNew); 
       socket.off(`channel_${activeChannel}_message_update`, onUpdate); 
       socket.off(`channel_${activeChannel}_typing`, onTyping);
+      if (typeof window !== 'undefined') {
+        (window as any).__setOpenProjectChatId = null;
+      }
     };
-  }, [activeChannel, authLoading, resetChatUnread]); // 👈 Ajout de la dépendance
+  }, [activeChannel, authLoading, user, resetChatUnread, scrollBottom]);
 
-  // ... (LE RESTE DE VOTRE CODE EST INCHANGÉ JUSQU'EN BAS)
-  // Détection du scroll
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const isNotBottom = e.currentTarget.scrollHeight - e.currentTarget.scrollTop - e.currentTarget.clientHeight > 100;
     setShowScrollBtn(isNotBottom);
-    if (!isNotBottom) {
-      setUnreadScrollCount(0);
-    }
+    if (!isNotBottom) setUnreadScrollCount(0);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -267,17 +270,27 @@ export default function GlobalChatPage() {
     );
   };
 
+  // 🔒 CORRECTION : parseMessage gère les URL proprement et ajoute crossOrigin="anonymous"
   const parseMessage = (msg: string) => {
     const token = Cookies.get('token');
     const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-    const resolveUrl = (pathUrl: string) => pathUrl.startsWith('http') ? pathUrl : `${baseURL}${pathUrl}?token=${token}`;
+    
+    const resolveUrl = (pathUrl: string) => {
+      if (!pathUrl) return '';
+      if (pathUrl.startsWith('http://') || pathUrl.startsWith('https://')) return pathUrl;
+      const clean = pathUrl.startsWith('/') ? pathUrl : `/${pathUrl}`;
+      return `${baseURL}${clean}?token=${token || ''}`;
+    };
 
     if (msg.startsWith('[TRANSFERT]')) return <div className="space-y-0.5"><div className="text-[9px] uppercase opacity-70 border-l-2 border-white/40 pl-1.5">Transféré</div><div>{parseMessage(msg.replace('[TRANSFERT]', '').trim())}</div></div>;
-    if (msg.startsWith('[AUDIO]')) return <audio controls src={resolveUrl(msg.replace('[AUDIO]', ''))} className="w-48 sm:w-64 h-8 rounded outline-none" onPlay={(e) => e.stopPropagation()} />;
-    if (msg.startsWith('[IMAGE]')) return <img src={resolveUrl(msg.replace('[IMAGE]', ''))} alt="Img" className="max-w-[200px] sm:max-w-xs rounded cursor-pointer" onClick={() => window.open(resolveUrl(msg.replace('[IMAGE]', '')), '_blank')} />;
+    
+    if (msg.startsWith('[AUDIO]')) return <audio controls src={resolveUrl(msg.replace('[AUDIO]', ''))} crossOrigin="anonymous" className="w-48 sm:w-64 h-8 rounded outline-none" onPlay={(e) => e.stopPropagation()} />;
+    
+    if (msg.startsWith('[IMAGE]')) return <img src={resolveUrl(msg.replace('[IMAGE]', ''))} alt="Img" crossOrigin="anonymous" className="max-w-[200px] sm:max-w-xs rounded cursor-pointer" onClick={() => window.open(resolveUrl(msg.replace('[IMAGE]', '')), '_blank')} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />;
+    
     if (msg.startsWith('[FILE]')) {
       const [pathUrl, fileName] = msg.replace('[FILE]', '').split('|');
-      return <a href={resolveUrl(pathUrl)} download={fileName} target="_blank" className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 px-3 py-2 rounded-lg text-white border border-white/10 transition"><Download size={14} /> <span className="text-xs font-bold truncate max-w-[150px] sm:max-w-[200px]">{fileName || 'Document'}</span></a>;
+      return <a href={resolveUrl(pathUrl)} download={fileName} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 px-3 py-2 rounded-lg text-white border border-white/10 transition"><Download size={14} /> <span className="text-xs font-bold truncate max-w-[150px] sm:max-w-[200px]">{fileName || 'Document'}</span></a>;
     }
     return <span className="whitespace-pre-wrap">{renderTextWithMentions(msg)}</span>;
   };

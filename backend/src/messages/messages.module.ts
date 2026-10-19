@@ -9,7 +9,7 @@ import { MessagesController } from './messages.controller.js';
 import { MessagesGateway } from './messages.gateway.js';
 import { ChannelMessage } from './entities/channel-message.entity.js';
 import { User } from '../users/entities/user.entity.js';
-import { NotificationsModule } from '../notifications/notifications.module.js'; // 👈 Ajuste le chemin si besoin
+import { NotificationsModule } from '../notifications/notifications.module.js';
 
 @Module({
   imports: [
@@ -21,10 +21,10 @@ import { NotificationsModule } from '../notifications/notifications.module.js'; 
       Task,
       User,
     ]),
-    forwardRef(() => NotificationsModule), // 👈 Empêche la dépendance circulaire
+    forwardRef(() => NotificationsModule),
   ],
   controllers: [MessagesController],
   providers: [MessagesService, MessagesGateway],
-  exports: [MessagesService, MessagesGateway], // 👈 Rend MessagesGateway accessible aux notifications
+  exports: [MessagesService, MessagesGateway], 
 })
 export class MessagesModule {}

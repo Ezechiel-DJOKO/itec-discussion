@@ -30,7 +30,19 @@ export class MessagesGateway implements OnGatewayConnection {
 
   // ─── MESSAGES PROJETS ───
   diffuserProjectMessage(projectId: string, message: any) {
+    // 1. Met à jour la boîte de dialogue du chat si elle est ouverte
     this.server.emit(`project_${projectId}_message`, message);
+    
+    // 🔴 2. ALLUME LES PASTILLES ROUGES (Navbar & Bouton flottant)
+    this.server.emit('receive_message', {
+      id: message.id,
+      message: message.message,
+      projectId: projectId,
+      senderId: message.userId,
+      userId: message.userId,
+      user: message.user,
+      creeLe: message.creeLe,
+    });
   }
 
   diffuserProjectMessageUpdate(projectId: string, message: any) {
@@ -40,6 +52,17 @@ export class MessagesGateway implements OnGatewayConnection {
   // ─── MESSAGES CHANNELS GLOBAUX ───
   diffuserChannelMessage(channel: string, message: any) {
     this.server.emit(`channel_${channel}_message`, message);
+    
+    // 🔴 2. ALLUME LES PASTILLES ROUGES
+    this.server.emit('receive_message', {
+      id: message.id,
+      message: message.message,
+      channelId: channel,
+      senderId: message.userId,
+      userId: message.userId,
+      user: message.user,
+      creeLe: message.creeLe,
+    });
   }
 
   diffuserChannelMessageUpdate(channel: string, message: any) {

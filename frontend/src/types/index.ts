@@ -3,9 +3,14 @@ export interface User {
   nom: string;
   email: string;
   avatar?: string;
-  role?: 'admin' | 'responsable' | 'membre' | string;
   prenom?: string;
+  // Rôles flexibles (frontend + backend)
+  role?: 'admin' | 'ADMIN' | 'SUPER_ADMIN' | 'responsable' | 'membre' | string;
+  isSuperAdmin?: boolean;   // 👈 manquait → erreur TS dans Navbar
   isResponsable?: boolean;
+  permissions?: string[];
+  sub?: string;             // 👈 utile pour JWT (id parfois dans sub)
+  creeLe?: string;
 }
 
 export interface ProjectMember {
@@ -28,6 +33,7 @@ export interface Project {
   membres: ProjectMember[];
   creeLe: string;
   modifieLe: string;
+  chef?: User;
 }
 
 export type TaskStatut = 'a_faire' | 'en_cours' | 'en_attente' | 'termine';
@@ -72,6 +78,7 @@ export interface Notification {
   message: string;
   lu: boolean;
   creeLe: string;
+  type?: string;
 }
 
 export type ActionType = 'statut_modifie' | 'surplus_accorde' | 'fichier_uploade';

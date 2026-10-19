@@ -6,7 +6,6 @@ import { TaskComment } from './entities/task-comment.entity.js';
 import { MemberRole, ProjectMember } from '../projects/entities/project-member.entity.js';
 import { Task } from '../tasks/entities/task.entity.js';
 import { MessagesGateway } from './messages.gateway.js';
-// 🔴 NOUVEAUX IMPORTS EN HAUT :
 import { ChannelMessage, ChannelType } from './entities/channel-message.entity.js';
 import { User } from '../users/entities/user.entity.js';
 import { AppPermission } from '../users/entities/user.entity.js';
@@ -19,12 +18,10 @@ export class MessagesService {
     @InjectRepository(ProjectMember) private readonly memberRepo: Repository<ProjectMember>,
     @InjectRepository(Task) private readonly taskRepo: Repository<Task>,
     private readonly gateway: MessagesGateway,
-    // 🔴 AJOUTER DANS LE CONSTRUCTOR :
     @InjectRepository(ChannelMessage) private readonly channelMsgRepo: Repository<ChannelMessage>,
     @InjectRepository(User) private readonly userRepo: Repository<User>
   ) {}
 
-  // ─── HELPER POUR LE PREVIEW DES RÉPONSES ───
   private generateReplyPreview(originalMessage: any) {
     if (!originalMessage || originalMessage.isDeleted) return null;
     let preview = originalMessage.message;
@@ -41,7 +38,6 @@ export class MessagesService {
     };
   }
 
-  // ─── CHAT DU PROJET ────────────────────────────────────────
   async getProjectMessages(projectId: string, userId: string) {
     const member = await this.memberRepo.findOne({ where: { projectId, userId } });
     if (!member) throw new ForbiddenException("Non autorisé");
@@ -49,10 +45,10 @@ export class MessagesService {
     return this.msgRepo.find({
       where: { projectId },
       order: { creeLe: 'ASC' },
+      relations: { user: true } // 👈 CORRECTION TYPEORM v0.3
     });
   }
 
-  // ─── AJOUTER UN MESSAGE PROJET ───
   async addProjectMessage(projectId: string, userId: string, texte: string, replyToId?: string) {
     const member = await this.memberRepo.findOne({ where: { projectId, userId } });
     if (!member) throw new ForbiddenException("Non autorisé");
@@ -64,13 +60,16 @@ export class MessagesService {
     }
 
     const msg = await this.msgRepo.save(this.msgRepo.create({ projectId, userId, message: texte, replyToId, replyTo }));
-    const savedMsg = await this.msgRepo.findOne({ where: { id: msg.id } });
+    
+    const savedMsg = await this.msgRepo.findOne({ 
+      where: { id: msg.id },
+      relations: { user: true } // 👈 CORRECTION TYPEORM v0.3
+    });
     
     this.gateway.diffuserProjectMessage(projectId, savedMsg);
     return savedMsg;
   }
 
-  // ─── COMMENTAIRES DE TÂCHE ─────────────────────────────────
   async getTaskComments(taskId: string, userId: string) {
     const task = await this.taskRepo.findOne({ where: { id: taskId } });
     if (!task) throw new NotFoundException('Tâche introuvable');
@@ -81,57 +80,49 @@ export class MessagesService {
     return this.commentRepo.find({
       where: { taskId },
       order: { creeLe: 'ASC' },
+      relations: { user: true } // 👈 CORRECTION TYPEORM v0.3
     });
   }
 
-    async addTaskComment(taskId: string, userId: string, texte: string) {
+  async addTaskComment(taskId: string, userId: string, texte: string) {
     const task = await this.taskRepo.findOne({ where: { id: taskId } });
-    
-    // 🔥 C'EST CETTE LIGNE QUI MANQUAIT POUR ENLEVER L'ERREUR ROUGE :
     if (!task) throw new NotFoundException('Tâche introuvable');
 
     const member = await this.memberRepo.findOne({ where: { projectId: task.projectId, userId } });
     if (!member) throw new ForbiddenException("Non autorisé");
 
     const comment = await this.commentRepo.save(this.commentRepo.create({ taskId, userId, message: texte }));
-    const savedComment = await this.commentRepo.findOne({ where: { id: comment.id } });
+    
+    const savedComment = await this.commentRepo.findOne({ 
+      where: { id: comment.id },
+      relations: { user: true } // 👈 CORRECTION TYPEORM v0.3
+    });
 
-    // 🔥 Diffuser en temps réel
     this.gateway.diffuserTaskComment(taskId, savedComment);
     return savedComment;
   }
 
-// 🔴 AJOUTER CES MÉTHODES TOUT EN BAS DU FICHIER :
-
-  // ─── VÉRIFIER SI L'UTILISATEUR EST RESPONSABLE ────────────
   private async isResponsable(userId: string): Promise<boolean> {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) return false;
-
     if (user.isSuperAdmin) return true;
-
     const perms = user.permissions || [];
-    if (perms.includes(AppPermission.CAN_ACCESS_QG)) {
-      return true;
-    }
-
+    if (perms.includes(AppPermission.CAN_ACCESS_QG)) return true;
     return false;
   }
 
-  // ─── CHANNELS GLOBAUX ET RESPONSABLES ─────────────────────
   async getChannelMessages(channel: ChannelType, userId: string) {
     if (channel === ChannelType.RESPONSABLES) {
       const isResp = await this.isResponsable(userId);
       if (!isResp) throw new ForbiddenException('Accès réservé aux responsables');
     }
-
     return this.channelMsgRepo.find({
       where: { channel },
-      order: { creeLe: 'ASC' }, // ASC pour afficher les plus anciens en haut (logique de chat)
+      order: { creeLe: 'ASC' },
+      relations: { user: true } // 👈 CORRECTION TYPEORM v0.3
     });
   }
 
-  // ─── AJOUTER UN MESSAGE CHANNEL ───
   async addChannelMessage(channel: ChannelType, userId: string, texte: string, replyToId?: string) {
     if (channel === ChannelType.RESPONSABLES) {
       const isResp = await this.isResponsable(userId);
@@ -145,13 +136,16 @@ export class MessagesService {
     }
 
     const msg = await this.channelMsgRepo.save(this.channelMsgRepo.create({ channel, userId, message: texte, replyToId, replyTo }));
-    const savedMsg = await this.channelMsgRepo.findOne({ where: { id: msg.id } });
+    
+    const savedMsg = await this.channelMsgRepo.findOne({ 
+      where: { id: msg.id },
+      relations: { user: true } // 👈 CORRECTION TYPEORM v0.3
+    });
 
     this.gateway.diffuserChannelMessage(channel, savedMsg);
     return savedMsg;
   }
 
-    // 🔴 EDITER UN MESSAGE PROJET
   async updateProjectMessage(id: string, userId: string, newText: string) {
     const msg = await this.msgRepo.findOne({ where: { id } });
     if (!msg) throw new NotFoundException('Message introuvable');
@@ -160,12 +154,11 @@ export class MessagesService {
     msg.message = newText;
     msg.isEdited = true;
     const saved = await this.msgRepo.save(msg);
-    const full = await this.msgRepo.findOne({ where: { id: saved.id } });
+    const full = await this.msgRepo.findOne({ where: { id: saved.id }, relations: { user: true } });
     this.gateway.diffuserProjectMessageUpdate(msg.projectId, full);
     return full;
   }
 
-  // 🔴 SUPPRIMER UN MESSAGE PROJET
   async deleteProjectMessage(id: string, userId: string) {
     const msg = await this.msgRepo.findOne({ where: { id } });
     if (!msg) throw new NotFoundException('Message introuvable');
@@ -174,12 +167,11 @@ export class MessagesService {
     msg.message = ' Ce message a été supprimé';
     msg.isDeleted = true;
     const saved = await this.msgRepo.save(msg);
-    const full = await this.msgRepo.findOne({ where: { id: saved.id } });
+    const full = await this.msgRepo.findOne({ where: { id: saved.id }, relations: { user: true } });
     this.gateway.diffuserProjectMessageUpdate(msg.projectId, full);
     return full;
   }
 
-  // 🔴 EDITER UN MESSAGE CHANNEL
   async updateChannelMessage(id: string, userId: string, newText: string) {
     const msg = await this.channelMsgRepo.findOne({ where: { id } });
     if (!msg) throw new NotFoundException('Message introuvable');
@@ -188,12 +180,11 @@ export class MessagesService {
     msg.message = newText;
     msg.isEdited = true;
     const saved = await this.channelMsgRepo.save(msg);
-    const full = await this.channelMsgRepo.findOne({ where: { id: saved.id } });
+    const full = await this.channelMsgRepo.findOne({ where: { id: saved.id }, relations: { user: true } });
     this.gateway.diffuserChannelMessageUpdate(msg.channel, full);
     return full;
   }
 
-  // 🔴 SUPPRIMER UN MESSAGE CHANNEL
   async deleteChannelMessage(id: string, userId: string) {
     const msg = await this.channelMsgRepo.findOne({ where: { id } });
     if (!msg) throw new NotFoundException('Message introuvable');
@@ -202,12 +193,11 @@ export class MessagesService {
     msg.message = ' Ce message a été supprimé';
     msg.isDeleted = true;
     const saved = await this.channelMsgRepo.save(msg);
-    const full = await this.channelMsgRepo.findOne({ where: { id: saved.id } });
+    const full = await this.channelMsgRepo.findOne({ where: { id: saved.id }, relations: { user: true } });
     this.gateway.diffuserChannelMessageUpdate(msg.channel, full);
     return full;
   }
 
-    // ─── ÉPINGLER UN MESSAGE PROJET ───
   async togglePinProjectMessage(id: string, userId: string) {
     const msg = await this.msgRepo.findOne({ where: { id } });
     if (!msg) throw new NotFoundException('Message introuvable');
@@ -221,12 +211,11 @@ export class MessagesService {
 
     msg.isPinned = !msg.isPinned;
     const saved = await this.msgRepo.save(msg);
-    const full = await this.msgRepo.findOne({ where: { id: saved.id } });
+    const full = await this.msgRepo.findOne({ where: { id: saved.id }, relations: { user: true } });
     this.gateway.diffuserProjectMessageUpdate(msg.projectId, full);
     return full;
   }
 
-  // ─── ÉPINGLER UN MESSAGE CHANNEL ───
   async togglePinChannelMessage(id: string, userId: string) {
     const msg = await this.channelMsgRepo.findOne({ where: { id } });
     if (!msg) throw new NotFoundException('Message introuvable');
@@ -236,12 +225,11 @@ export class MessagesService {
 
     msg.isPinned = !msg.isPinned;
     const saved = await this.channelMsgRepo.save(msg);
-    const full = await this.channelMsgRepo.findOne({ where: { id: saved.id } });
+    const full = await this.channelMsgRepo.findOne({ where: { id: saved.id }, relations: { user: true } });
     this.gateway.diffuserChannelMessageUpdate(msg.channel, full);
     return full;
   }
 
-    // ─── RÉAGIR À UN MESSAGE PROJET ───
   async reactToProjectMessage(id: string, userId: string, emoji: string) {
     const msg = await this.msgRepo.findOne({ where: { id } });
     if (!msg) throw new NotFoundException('Message introuvable');
@@ -251,19 +239,18 @@ export class MessagesService {
 
     const userIndex = msg.reactions[emoji].indexOf(userId);
     if (userIndex > -1) {
-      msg.reactions[emoji].splice(userIndex, 1); // Retire la réaction si elle existe déjà
+      msg.reactions[emoji].splice(userIndex, 1);
       if (msg.reactions[emoji].length === 0) delete msg.reactions[emoji];
     } else {
-      msg.reactions[emoji].push(userId); // Ajoute la réaction
+      msg.reactions[emoji].push(userId);
     }
 
     const saved = await this.msgRepo.save(msg);
-    const full = await this.msgRepo.findOne({ where: { id: saved.id } });
+    const full = await this.msgRepo.findOne({ where: { id: saved.id }, relations: { user: true } });
     this.gateway.diffuserProjectMessageUpdate(msg.projectId, full);
     return full;
   }
 
-  // ─── RÉAGIR À UN MESSAGE CHANNEL ───
   async reactToChannelMessage(id: string, userId: string, emoji: string) {
     const msg = await this.channelMsgRepo.findOne({ where: { id } });
     if (!msg) throw new NotFoundException('Message introuvable');
@@ -280,7 +267,7 @@ export class MessagesService {
     }
 
     const saved = await this.channelMsgRepo.save(msg);
-    const full = await this.channelMsgRepo.findOne({ where: { id: saved.id } });
+    const full = await this.channelMsgRepo.findOne({ where: { id: saved.id }, relations: { user: true } });
     this.gateway.diffuserChannelMessageUpdate(msg.channel, full);
     return full;
   }
