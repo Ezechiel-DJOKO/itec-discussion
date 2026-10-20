@@ -1,37 +1,56 @@
-self.addEventListener('install', (e) => self.skipWaiting());
-self.addEventListener('activate', (e) => e.waitUntil(clients.claim()));
+// frontend/public/sw.js
 
-// Affiche une bannière même app fermée (quand un push arrivera)
+self.addEventListener('install', (event) => {
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
+// ÉCOUTE DES NOTIFICATIONS PUSH EN ARRIÈRE-PLAN (APP FERMÉE)
 self.addEventListener('push', (event) => {
-  let data = { title: 'ITEC Discuss', body: 'Nouveau message' };
-  try {
-    if (event.data) data = { ...data, ...event.data.json() };
-  } catch {}
+  if (!event.data) return;
 
-  event.waitUntil(
-    self.registration.showNotification(data.title, {
-      body: data.body,
+  try {
+    const data = event.data.json();
+    const title = data.title || '💬 ITEC Discuss';
+    const options = {
+      body: data.body || 'Nouveau message reçu',
       icon: '/logo.jpg',
       badge: '/logo.jpg',
-      vibrate: [120, 60, 120],
-      tag: 'itec-chat',
+      tag: data.tag || 'itec-chat-message',
       renotify: true,
-      data: { url: data.url || '/dashboard/chat' },
-    }),
-  );
+      vibrate: [200, 100, 200],
+      data: {
+        url: data.url || '/dashboard/chat',
+      },
+    };
+
+    event.waitUntil(self.registration.showNotification(title, options));
+  } catch (err) {
+    console.error('Erreur traitement Push SW:', err);
+  }
 });
 
+// CLIC SUR LA NOTIFICATION SUR L'ÉCRAN DU TÉLÉPHONE
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = event.notification.data?.url || '/dashboard/chat';
+
+  const targetUrl = event.notification.data?.url || '/dashboard/chat';
+
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
-      for (const c of list) {
-        if (c.url.includes('/dashboard') && 'focus' in c) return c.focus();
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // Si l'onglet est déjà ouvert, le ramener au premier plan
+      for (const client of clientList) {
+        if (client.url.includes('/dashboard') && 'focus' in client) {
+          return client.focus();
+        }
       }
-      if (clients.openWindow) return clients.openWindow(url);
-    }),
+      // Sinon ouvrir une nouvelle fenêtre
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
+    })
   );
 });
-
-self.addEventListener('fetch', () => {});

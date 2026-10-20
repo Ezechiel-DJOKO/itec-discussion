@@ -8,6 +8,18 @@ import { Notification as SystemNotification, User } from '@/types';
 const LAST_READ_KEY = 'itec_last_read';
 const UNREAD_KEY = 'itec_unread_chats';
 
+// 👉 HELPER POUR LA CLÉ VAPID (cast correct pour TypeScript)
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
 function loadJson<T>(key: string, fallback: T): T {
   if (typeof window === 'undefined') return fallback;
   try {
@@ -42,7 +54,6 @@ export function useGlobalNotifications(user: User | null) {
 
   const userId = user?.id || user?.sub || '';
 
-  // ── Boot localStorage + permission ──
   useEffect(() => {
     setUnreadChats(loadJson<Record<string, number>>(UNREAD_KEY, {}));
     if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -69,7 +80,36 @@ export function useGlobalNotifications(user: User | null) {
     } catch {}
   }, []);
 
-    const triggerPushNotification = useCallback(async (title: string, body: string) => {
+  // 🔔 S'ABONNER AUX NOTIFICATIONS PUSH EN ARRIÈRE-PLAN
+  const registerWebPushSubscription = async () => {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+
+    try {
+      const registration = await navigator.serviceWorker.register('/sw.js');
+      await navigator.serviceWorker.ready;
+
+      const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+      if (!vapidPublicKey) {
+        console.warn('⚠️ NEXT_PUBLIC_VAPID_PUBLIC_KEY est introuvable dans le .env.local');
+        return;
+      }
+
+      // Cast explicite pour contourner le conflit de types TypeScript / DOM
+      const convertedKey = urlBase64ToUint8Array(vapidPublicKey) as BufferSource;
+
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: convertedKey,
+      });
+
+      await api.post('/notifications/push-subscription', subscription);
+      console.log('✅ Abonnement Web Push enregistré avec succès auprès du backend.');
+    } catch (err) {
+      console.error('Erreur lors de la souscription Web Push:', err);
+    }
+  };
+
+  const triggerPushNotification = useCallback(async (title: string, body: string) => {
     if (typeof window === 'undefined' || !('Notification' in window)) return;
     if (Notification.permission !== 'granted') return;
 
@@ -79,12 +119,11 @@ export function useGlobalNotifications(user: User | null) {
       badge: '/logo.jpg',
       tag: 'itec-chat',
       renotify: true,
-      vibrate: [200, 100, 200], // Vibration sur téléphone
+      vibrate: [200, 100, 200],
       data: { url: window.location.href },
     } as any;
 
     try {
-      // 1. PRIORITÉ MOBILE : Utiliser le Service Worker s'il est disponible
       if ('serviceWorker' in navigator) {
         const reg = await navigator.serviceWorker.ready;
         if (reg && reg.showNotification) {
@@ -96,7 +135,6 @@ export function useGlobalNotifications(user: User | null) {
       console.warn('Erreur Service Worker notification:', err);
     }
 
-    // 2. FALLBACK PC DESKTOP : Si le Service Worker n'est pas dispo
     try {
       const n = new Notification(title, options);
       n.onclick = () => {
@@ -110,13 +148,19 @@ export function useGlobalNotifications(user: User | null) {
 
   const requestPushPermission = async () => {
     if (typeof window === 'undefined' || !('Notification' in window)) return;
+
     if (Notification.permission === 'granted') {
       setHasPushPermission(true);
+      await registerWebPushSubscription();
       return;
     }
-    // Demande explicite au clic (ex: via Navbar)
+
     const permission = await Notification.requestPermission();
     setHasPushPermission(permission === 'granted');
+
+    if (permission === 'granted') {
+      await registerWebPushSubscription();
+    }
   };
 
   const incrementChatUnread = useCallback(
@@ -139,7 +183,6 @@ export function useGlobalNotifications(user: User | null) {
         delete next[channelId];
         return next;
       });
-      // Mémoriser "lu jusqu'à maintenant"
       const lastRead = loadJson<Record<string, string>>(LAST_READ_KEY, {});
       lastRead[channelId] = new Date().toISOString();
       saveJson(LAST_READ_KEY, lastRead);
@@ -153,7 +196,7 @@ export function useGlobalNotifications(user: User | null) {
   );
 
   // ══════════════════════════════════════════════
-  // A) SYNC AU LOGIN : recalcule les non-lus même si offline
+  // A) SYNC AU LOGIN
   // ══════════════════════════════════════════════
   useEffect(() => {
     if (!userId) {
@@ -163,6 +206,14 @@ export function useGlobalNotifications(user: User | null) {
     if (syncedRef.current) return;
     syncedRef.current = true;
 
+    if (
+      typeof window !== 'undefined' &&
+      'Notification' in window &&
+      Notification.permission === 'granted'
+    ) {
+      registerWebPushSubscription().catch(() => {});
+    }
+
     const sync = async () => {
       const lastRead = loadJson<Record<string, string>>(LAST_READ_KEY, {});
       const counts: Record<string, number> = {};
@@ -171,13 +222,12 @@ export function useGlobalNotifications(user: User | null) {
         const since = lastRead[key] ? new Date(lastRead[key]).getTime() : 0;
         return (messages || []).filter((m) => {
           if (!m?.creeLe) return false;
-          if (String(m.userId) === String(userId)) return false; // Ne pas compter ses propres messages
+          if (String(m.userId) === String(userId)) return false;
           return new Date(m.creeLe).getTime() > since;
         }).length;
       };
 
       try {
-        // Channels globaux
         const globalRes = await api.get('/channels/global/messages');
         const g = countSince(globalRes.data, 'global');
         if (g > 0) counts['global'] = g;
@@ -200,20 +250,18 @@ export function useGlobalNotifications(user: User | null) {
         const projects = (projectsRes.data || []).filter(
           (p: any) => p.statut !== 'archive'
         );
-        
-        // Limiter pour ne pas spammer l'API
+
         await Promise.all(
           projects.slice(0, 30).map(async (p: any) => {
             try {
               const res = await api.get(`/projects/${p.id}/messages`);
               const c = countSince(res.data, p.id);
               if (c > 0) counts[p.id] = c;
-            } catch {} // Attrape silencieusement les 403 pour les projets dont on est pas membre
+            } catch {}
           })
         );
       } catch {}
 
-      // Fusionne avec l'existant (au cas où du live est déjà arrivé)
       setUnreadChats((prev) => {
         const merged = { ...prev };
         Object.entries(counts).forEach(([k, v]) => {
@@ -240,15 +288,11 @@ export function useGlobalNotifications(user: User | null) {
 
       const senderId = data.senderId || data.userId || data.user?.id;
       const targetId =
-        data.projectId ||
-        data.project?.id ||
-        data.channelId ||
-        data.channel;
+        data.projectId || data.project?.id || data.channelId || data.channel;
 
       if (!targetId) return;
       if (senderId && String(senderId) === String(userId)) return;
 
-      // QG réservé
       if (String(targetId) === 'responsables') {
         const role = (user?.role || '').toUpperCase();
         const canQG =
@@ -265,7 +309,6 @@ export function useGlobalNotifications(user: User | null) {
           ? (window as any).__setOpenProjectChatId
           : null;
 
-      // Déjà en train de lire ce salon → pas de pastille, on avance lastRead
       if (openId && String(openId) === String(targetId)) {
         const lastRead = loadJson<Record<string, string>>(LAST_READ_KEY, {});
         lastRead[String(targetId)] = new Date().toISOString();
@@ -284,7 +327,6 @@ export function useGlobalNotifications(user: User | null) {
     socket.on('receive_message', handleIncoming);
     socket.on('global_new_message', handleIncoming);
 
-    // Filet de sécurité : événements room aussi
     socket.onAny((event, data) => {
       if (
         typeof event === 'string' &&
@@ -292,7 +334,6 @@ export function useGlobalNotifications(user: User | null) {
         !event.includes('_update') &&
         !event.includes('typing')
       ) {
-        // receive_message déjà géré ; les rooms project_X_message / channel_X_message
         if (event.startsWith('project_') || event.startsWith('channel_')) {
           handleIncoming({
             ...data,
